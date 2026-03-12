@@ -44,11 +44,22 @@ export default function QuranTracker() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingType, setEditingType] = useState<"hizb" | "sourate" | null>(null);
 
-  const today = new Date();
-  const todayISO = today.toISOString();
-  const weekStart = startOfWeekMonday(today);
-  const monthStart = startOfMonth(today);
-  const currentYear = today.getFullYear();
+  // dates pilotées par le client
+  const [today, setToday] = useState<Date | null>(null);
+  const [weekStart, setWeekStart] = useState<Date | null>(null);
+  const [monthStart, setMonthStart] = useState<Date | null>(null);
+  const [currentYear, setCurrentYear] = useState<number | null>(null);
+
+  useEffect(() => {
+    const t = new Date();
+    const ws = startOfWeekMonday(t);
+    const ms = startOfMonth(t);
+    setToday(t);
+    setWeekStart(ws);
+    setMonthStart(ms);
+    setCurrentYear(t.getFullYear());
+  }, []);
+  // [web:132]
 
   // LOAD
   useEffect(() => {
@@ -67,13 +78,11 @@ export default function QuranTracker() {
     localStorage.setItem("quranEntries", JSON.stringify(entries));
   }, [entries]);
 
-  // --- Ajout / édition ---
-
   const addHizb = () => {
-    if (hizbNumber === "" || Number(hizbNumber) <= 0) return;
+    if (hizbNumber === "" || Number(hizbNumber) <= 0 || !today) return;
     const entry: QuranEntry = {
       id: crypto.randomUUID(),
-      date: todayISO,
+      date: today.toISOString(),
       type: "hizb",
       hizbNumber: Number(hizbNumber),
     };
@@ -82,10 +91,11 @@ export default function QuranTracker() {
   };
 
   const addSourate = () => {
+    if (!today) return;
     if (!sourateName.trim() || repetitions === "" || Number(repetitions) <= 0) return;
     const entry: QuranEntry = {
       id: crypto.randomUUID(),
-      date: todayISO,
+      date: today.toISOString(),
       type: "sourate",
       sourateName: sourateName.trim(),
       repetitions: Number(repetitions),
@@ -144,8 +154,6 @@ export default function QuranTracker() {
     setRepetitions("");
   };
 
-  // --- Stats principales + semaine/mois précédents ---
-
   const {
     weekHizbCount,
     monthHizbCount,
@@ -155,6 +163,18 @@ export default function QuranTracker() {
     prevWeekHizbCount,
     prevMonthHizbCount,
   } = useMemo(() => {
+    if (!today || !currentYear || !weekStart || !monthStart) {
+      return {
+        weekHizbCount: 0,
+        monthHizbCount: 0,
+        yearHizbCount: 0,
+        weekHizbNumbers: [] as number[],
+        weekSouratesMap: new Map<string, { repetitions: number; weekKey: string }>(),
+        prevWeekHizbCount: 0,
+        prevMonthHizbCount: 0,
+      };
+    }
+
     let weekHizbCount = 0;
     let monthHizbCount = 0;
     let yearHizbCount = 0;
@@ -165,7 +185,7 @@ export default function QuranTracker() {
     const weekHizbNumbers: number[] = [];
     const weekSouratesMap = new Map<string, { repetitions: number; weekKey: string }>();
 
-    const prevWeekStart = new Date(startOfWeekMonday(today));
+    const prevWeekStart = new Date(weekStart);
     prevWeekStart.setDate(prevWeekStart.getDate() - 7);
     const prevWeekEnd = new Date(prevWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000);
 
@@ -221,15 +241,17 @@ export default function QuranTracker() {
       prevWeekHizbCount,
       prevMonthHizbCount,
     };
-  }, [entries, currentYear, today, monthStart]);
+  }, [entries, currentYear, today, weekStart, monthStart]);
   // [web:77][web:79][web:81]
 
   const hizbPerDayTarget = 4;
-  const daysSinceWeekStart =
-    1 + Math.floor((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24));
-  const targetWeek = hizbPerDayTarget * daysSinceWeekStart;
-  const percentWeek =
-    targetWeek > 0 ? Math.min(100, Math.round((weekHizbCount / targetWeek) * 100)) : 0;
+  const percentWeek = useMemo(() => {
+    if (!today || !weekStart) return 0;
+    const daysSinceWeekStart =
+      1 + Math.floor((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24));
+    const targetWeek = hizbPerDayTarget * daysSinceWeekStart;
+    return targetWeek > 0 ? Math.min(100, Math.round((weekHizbCount / targetWeek) * 100)) : 0;
+  }, [today, weekStart, weekHizbCount]);
 
   const weekDiff =
     prevWeekHizbCount === 0
@@ -246,31 +268,38 @@ export default function QuranTracker() {
       : Math.round(((monthHizbCount - prevMonthHizbCount) / prevMonthHizbCount) * 100);
   // [web:85]
 
-  // Libellés
-  const weekLabel = `${weekStart.toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "2-digit",
-  })} ➜ ${new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000).toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "2-digit",
-  })}`;
+  const weekLabel =
+    weekStart &&
+    `${weekStart.toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "2-digit",
+    })} ➜ ${new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000).toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "2-digit",
+    })}`;
 
-  const todayLabel = today.toLocaleDateString("fr-FR", {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
+  const todayLabel =
+    today &&
+    today.toLocaleDateString("fr-FR", {
+      weekday: "long",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
 
-  const monthLabel = today.toLocaleDateString("fr-FR", {
-    month: "long",
-    year: "numeric",
-  });
+  const monthLabel =
+    today &&
+    today.toLocaleDateString("fr-FR", {
+      month: "long",
+      year: "numeric",
+    });
 
   const weekSouratesList = Array.from(weekSouratesMap.entries()).map(([key, value]) => {
     const [name] = key.split("-");
     return { name, repetitions: value.repetitions };
   });
+
+  const isReady = !!today && !!weekStart && !!monthStart && currentYear !== null;
 
   return (
     <main>
@@ -279,12 +308,16 @@ export default function QuranTracker() {
       </Link>
 
       <h1>Quran Tracker</h1>
-      <p style={{ textAlign: "center", marginBottom: "1rem", color: "#666" }}>{todayLabel}</p>
+      <p style={{ textAlign: "center", marginBottom: "1rem", color: "#666" }}>
+        {todayLabel || "Chargement de la date..."}
+      </p>
 
       {/* Objectif & Jauge */}
       <section className="list-item" style={{ marginBottom: "1rem" }}>
         <h2 style={{ fontSize: "1.1rem", marginBottom: "0.25rem" }}>Objectif : 4 Hizb / jour</h2>
-        <p style={{ fontSize: "0.9rem", marginBottom: "0.4rem" }}>Semaine du {weekLabel}</p>
+        <p style={{ fontSize: "0.9rem", marginBottom: "0.4rem" }}>
+          Semaine du {weekLabel || "..."}
+        </p>
         <div
           style={{
             background: "#edf2f7",
@@ -317,7 +350,7 @@ export default function QuranTracker() {
       <section className="list-item">
         <h2>Hizb lus</h2>
         <p style={{ fontSize: "0.9rem", marginBottom: "0.35rem" }}>
-          Total {currentYear} : <strong>{yearHizbCount}</strong> hizb
+          Total {currentYear ?? "..."} : <strong>{yearHizbCount}</strong> hizb
         </p>
 
         <div
@@ -355,7 +388,7 @@ export default function QuranTracker() {
               </button>
             </>
           ) : (
-            <button className="btn" onClick={addHizb}>
+            <button className="btn" onClick={addHizb} disabled={!isReady}>
               ✓ Valider hizb
             </button>
           )}
@@ -413,7 +446,7 @@ export default function QuranTracker() {
               </button>
             </>
           ) : (
-            <button className="btn" onClick={addSourate}>
+            <button className="btn" onClick={addSourate} disabled={!isReady}>
               + Ajouter sourate
             </button>
           )}
@@ -426,7 +459,9 @@ export default function QuranTracker() {
         <p style={{ fontSize: "0.9rem" }}>
           Semaine : {weekHizbCount} hizb • Mois : {monthHizbCount} hizb
         </p>
-        <p style={{ fontSize: "0.9rem", marginTop: "0.3rem" }}>Mois actuel : {monthLabel}</p>
+        <p style={{ fontSize: "0.9rem", marginTop: "0.3rem" }}>
+          Mois actuel : {monthLabel || "..."}
+        </p>
       </section>
 
       {/* Récap semaine */}

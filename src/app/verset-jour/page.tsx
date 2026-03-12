@@ -22,14 +22,30 @@ export default function VersetJour() {
     error: null,
   });
 
+  const [todayLabel, setTodayLabel] = useState("");
+
+  useEffect(() => {
+    const d = new Date();
+    setTodayLabel(
+      d.toLocaleDateString("fr-FR", {
+        weekday: "long",
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      }),
+    );
+  }, []);
+  // [web:132]
+
   const fetchRandomAyah = async () => {
     try {
       setVerse((prev) => ({ ...prev, loading: true, error: null }));
 
-      // Génère un numéro de verset aléatoire (1 à 6236)
       const randomNumber = Math.floor(Math.random() * 6236) + 1;
-      // Deux éditions : arabe (uthmani) + français (traduction)
-      const url = `https://api.alquran.cloud/v1/ayah/${randomNumber}/editions/quran-uthmani,fr.hamidullah`;
+      const url =
+        "https://api.alquran.cloud/v1/ayah/" +
+        randomNumber +
+        "/editions/quran-uthmani,fr.hamidullah";
       const res = await fetch(url);
       const json = await res.json();
 
@@ -68,13 +84,6 @@ export default function VersetJour() {
     fetchRandomAyah();
   }, []);
 
-  const todayLabel = new Date().toLocaleDateString("fr-FR", {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
-
   return (
     <main>
       <Link href="/" className="btn">
@@ -82,7 +91,9 @@ export default function VersetJour() {
       </Link>
 
       <h1>Verset du jour</h1>
-      <p style={{ textAlign: "center", marginBottom: "1rem", color: "#666" }}>{todayLabel}</p>
+      <p style={{ textAlign: "center", marginBottom: "1rem", color: "#666" }}>
+        {todayLabel || "Chargement de la date..."}
+      </p>
 
       <section className="list-item">
         {verse.loading && (

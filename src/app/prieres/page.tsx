@@ -26,18 +26,29 @@ export default function PrieresPage() {
   const [days, setDays] = useState<DayCount[]>([]);
   const [todayCount, setTodayCount] = useState(0);
 
-  // Date actuelle calculée côté client
-  const { today, todayKey, lastFriday, lastFridayKey } = useMemo(() => {
+  // On stocke les dates dans le state, initialisées après montage
+  const [today, setToday] = useState<Date | null>(null);
+  const [todayKey, setTodayKey] = useState<string>("");
+  const [lastFriday, setLastFriday] = useState<Date | null>(null);
+  const [lastFridayKey, setLastFridayKey] = useState<string>("");
+
+  // Initialise dates côté client après montage
+  useEffect(() => {
     const t = new Date();
     const k = formatDateISO(t);
     const lf = getLastFriday(t);
     const lfKey = formatDateISO(lf);
-    return { today: t, todayKey: k, lastFriday: lf, lastFridayKey: lfKey };
-  }, []);
-  // [web:106]
 
-  // LOAD
+    setToday(t);
+    setTodayKey(k);
+    setLastFriday(lf);
+    setLastFridayKey(lfKey);
+  }, []);
+  // [web:132]
+
+  // LOAD (une fois que todayKey est connu)
   useEffect(() => {
+    if (!todayKey) return;
     const saved = localStorage.getItem("prieresByDay");
     if (saved) {
       try {
@@ -59,6 +70,7 @@ export default function PrieresPage() {
   // [web:95]
 
   const incrementToday = () => {
+    if (!todayKey) return;
     setDays((prev) => {
       const existing = prev.find((d) => d.date === todayKey);
       if (existing) {
@@ -72,7 +84,9 @@ export default function PrieresPage() {
 
   const totalAllTime = useMemo(() => days.reduce((sum, d) => sum + d.count, 0), [days]);
 
-  const lastFridayCount = days.find((d) => d.date === lastFridayKey)?.count ?? 0;
+  const lastFridayCount = lastFridayKey
+    ? (days.find((d) => d.date === lastFridayKey)?.count ?? 0)
+    : 0;
 
   const comparePercent =
     lastFridayCount === 0
@@ -80,26 +94,32 @@ export default function PrieresPage() {
         ? 100
         : 0
       : Math.round(((todayCount - lastFridayCount) / lastFridayCount) * 100);
+  // [web:104]
 
   const sortedDays = useMemo(
     () => [...days].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
     [days],
   );
-  // [web:101][web:97]
 
-  const todayLabel = today.toLocaleDateString("fr-FR", {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
+  const todayLabel =
+    today &&
+    today.toLocaleDateString("fr-FR", {
+      weekday: "long",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
 
-  const lastFridayLabel = lastFriday.toLocaleDateString("fr-FR", {
-    weekday: "long",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  const lastFridayLabel =
+    lastFriday &&
+    lastFriday.toLocaleDateString("fr-FR", {
+      weekday: "long",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+
+  const isReady = !!today && !!todayKey && !!lastFriday && !!lastFridayKey;
 
   return (
     <main>
@@ -108,7 +128,9 @@ export default function PrieresPage() {
       </Link>
 
       <h1>Prières sur le Prophète ﷺ</h1>
-      <p style={{ textAlign: "center", marginBottom: "1rem", color: "#666" }}>{todayLabel}</p>
+      <p style={{ textAlign: "center", marginBottom: "1rem", color: "#666" }}>
+        {todayLabel || "Chargement de la date..."}
+      </p>
 
       {/* Bouton principal + recap jour */}
       <section className="list-item" style={{ marginBottom: "1rem" }}>
@@ -120,6 +142,7 @@ export default function PrieresPage() {
         <div style={{ textAlign: "center", marginTop: "0.5rem" }}>
           <button
             onClick={incrementToday}
+            disabled={!isReady}
             style={{
               width: "120px",
               height: "120px",
@@ -130,7 +153,8 @@ export default function PrieresPage() {
               fontWeight: 700,
               fontSize: "1.1rem",
               boxShadow: "0 18px 35px rgba(148, 126, 176, 0.45)",
-              cursor: "pointer",
+              cursor: isReady ? "pointer" : "not-allowed",
+              opacity: isReady ? 1 : 0.6,
               transition:
                 "transform 0.08s ease-out, box-shadow 0.08s ease-out, filter 0.08s ease-out",
               display: "inline-flex",
@@ -139,23 +163,24 @@ export default function PrieresPage() {
               textShadow: "0 1px 2px rgba(0,0,0,0.35)",
             }}
             onMouseDown={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.transform =
-                "scale(0.95) translateY(2px)";
-              (e.currentTarget as HTMLButtonElement).style.boxShadow =
-                "0 10px 20px rgba(148, 126, 176, 0.4)";
-              (e.currentTarget as HTMLButtonElement).style.filter = "brightness(0.95)";
+              if (!isReady) return;
+              const btn = e.currentTarget as HTMLButtonElement;
+              btn.style.transform = "scale(0.95) translateY(2px)";
+              btn.style.boxShadow = "0 10px 20px rgba(148, 126, 176, 0.4)";
+              btn.style.filter = "brightness(0.95)";
             }}
             onMouseUp={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.transform = "scale(1) translateY(0)";
-              (e.currentTarget as HTMLButtonElement).style.boxShadow =
-                "0 18px 35px rgba(148, 126, 176, 0.45)";
-              (e.currentTarget as HTMLButtonElement).style.filter = "brightness(1)";
+              if (!isReady) return;
+              const btn = e.currentTarget as HTMLButtonElement;
+              btn.style.transform = "scale(1) translateY(0)";
+              btn.style.boxShadow = "0 18px 35px rgba(148, 126, 176, 0.45)";
+              btn.style.filter = "brightness(1)";
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.transform = "scale(1) translateY(0)";
-              (e.currentTarget as HTMLButtonElement).style.boxShadow =
-                "0 18px 35px rgba(148, 126, 176, 0.45)";
-              (e.currentTarget as HTMLButtonElement).style.filter = "brightness(1)";
+              const btn = e.currentTarget as HTMLButtonElement;
+              btn.style.transform = "scale(1) translateY(0)";
+              btn.style.boxShadow = "0 18px 35px rgba(148, 126, 176, 0.45)";
+              btn.style.filter = "brightness(1)";
             }}
           >
             +1
@@ -170,7 +195,7 @@ export default function PrieresPage() {
           Total depuis le début : <strong>{totalAllTime}</strong> prières
         </p>
         <p style={{ fontSize: "0.9rem" }}>
-          Dernier vendredi ({lastFridayLabel}) : <strong>{lastFridayCount}</strong> prières
+          Dernier vendredi ({lastFridayLabel || "..."}): <strong>{lastFridayCount}</strong> prières
         </p>
       </section>
 
@@ -209,8 +234,8 @@ export default function PrieresPage() {
             month: "2-digit",
             year: "numeric",
           });
-          const isToday = d.date === todayKey;
-          const isLastFriday = d.date === lastFridayKey;
+          const isToday = todayKey && d.date === todayKey;
+          const isLastFriday = lastFridayKey && d.date === lastFridayKey;
 
           return (
             <div
