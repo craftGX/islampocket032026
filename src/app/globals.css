@@ -1,21 +1,33 @@
 @import url("https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Scheherazade+New:wght@400;700&display=swap");
 
 :root {
-  /* Palette claire */
-  --slate: #808d8e; /* gris bleu moyen */
-  --taupe: #766c7f; /* gris violacé */
-  --lilac: #947eb0; /* accent principal */
-  --periwinkle: #a3a5c3; /* fond cartes / secondaires */
-  --pale-cyan: #a9d2d5; /* accents doux / survol */
+  /* Palette violets / bleus plus sombres + accents néon */
+  --slate: #6b7280; /* gris bleu un peu plus sombre */
+  --taupe: #5b536c; /* gris violacé plus profond */
 
-  --bg-page: #f7fafc; /* fond global très clair */
-  --bg-card: #ffffff; /* fond des cartes */
-  --text-main: #1f2933; /* texte principal foncé */
+  /* Violet principal plus foncé */
+  --lilac: #7b6fe6; /* violet moyen soutenu [web:146] */
+
+  /* Bleu-violet de fond / éléments secondaires plus sombre */
+  --periwinkle: #4b3fa3; /* bleu violacé pour hover, badges, etc. [web:146] */
+
+  /* Cyan/violet doux pour les surfaces secondaires */
+  --pale-cyan: #a3bfff; /* bleu clair légèrement violacé */
+
+  /* Accents néon (à utiliser pour petits détails seulement) */
+  --neon-purple: #8a00c4; /* violet néon électrique [web:138] */
+  --neon-blue: #00f5ff; /* bleu/cyan néon [web:142] */
+
+  --bg-page: #f5f6fb; /* fond global un poil plus froid */
+  --bg-card: #ffffff;
+  --text-main: #0f172a;
   --text-muted: var(--taupe);
+
+  /* Accent par défaut = violet plus sombre */
   --accent: var(--lilac);
   --accent-soft: var(--pale-cyan);
-  --shadow: 0 10px 25px rgba(15, 23, 42, 0.12);
-  --border: 1px solid rgba(128, 141, 142, 0.3);
+  --shadow: 0 10px 25px rgba(15, 23, 42, 0.18);
+  --border: 1px solid rgba(75, 63, 163, 0.35);
 }
 
 * {
