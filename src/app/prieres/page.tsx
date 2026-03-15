@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 type DayCount = {
-  date: string; // 'YYYY-MM-DD'
+  date: string;
   count: number;
 };
 
@@ -12,20 +12,18 @@ function formatDateISO(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-// renvoie le dernier vendredi (passé)
 function getLastFriday(today: Date) {
   const d = new Date(today);
-  const day = d.getDay(); // 0=dim, 5=ven
+  const day = d.getDay();
   const diff = (day + 1 + 7 - 5) % 7;
   d.setDate(d.getDate() - diff);
   d.setHours(0, 0, 0, 0);
   return d;
 }
 
-// début de la semaine (lundi)
 function startOfWeekMonday(d: Date) {
   const date = new Date(d);
-  const day = date.getDay(); // 0=dim, 1=lun
+  const day = date.getDay();
   const diff = day === 0 ? -6 : 1 - day;
   date.setDate(date.getDate() + diff);
   date.setHours(0, 0, 0, 0);
@@ -40,67 +38,19 @@ function isSameMonth(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
 }
 
-// helpers localStorage safe pour Next
-function safeGetItem(key: string) {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function safeSetItem(key: string, value: string) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // ignore
-  }
-}
-
 export default function PrieresPage() {
-  // ---------- HOOKS (ordre fixe) ----------
-
-  // on sait si le client a hydraté
-  const [hydrated, setHydrated] = useState(false);
-
-  // état principal, initialisé depuis localStorage de manière lazy
-  const [days, setDays] = useState<DayCount[]>(() => {
-    const saved = safeGetItem("prieresByDay");
-    if (!saved) return [];
-    try {
-      return JSON.parse(saved) as DayCount[];
-    } catch {
-      return [];
-    }
-  });
+  const [days, setDays] = useState<DayCount[]>([]);
+  const [todayCount, setTodayCount] = useState(0);
 
   const [today, setToday] = useState<Date | null>(null);
   const [todayKey, setTodayKey] = useState<string>("");
   const [lastFriday, setLastFriday] = useState<Date | null>(null);
   const [lastFridayKey, setLastFridayKey] = useState<string>("");
 
-  const [dailyTarget, setDailyTarget] = useState<number>(() => {
-    const saved = safeGetItem("prieresDailyTarget");
-    if (!saved) return 100;
-    const n = Number(saved);
-    return !Number.isNaN(n) && n > 0 ? n : 100;
-  });
+  const [dailyTarget, setDailyTarget] = useState<number>(100);
+  const [streak, setStreak] = useState<number>(0);
 
-  const [streak, setStreak] = useState<number>(() => {
-    const saved = safeGetItem("prieresStreak");
-    if (!saved) return 0;
-    const n = Number(saved);
-    return !Number.isNaN(n) && n >= 0 ? n : 0;
-  });
-
-  const [todayCount, setTodayCount] = useState(0);
-
-  // useEffect: marquer l’hydratation et initialiser les dates + todayCount
   useEffect(() => {
-    setHydrated(true);
-
     const t = new Date();
     const k = formatDateISO(t);
     const lf = getLastFriday(t);
@@ -110,40 +60,134 @@ export default function PrieresPage() {
     setTodayKey(k);
     setLastFriday(lf);
     setLastFridayKey(lfKey);
+  }, []);
 
-    const saved = safeGetItem("prieresByDay");
+  useEffect(() => {
+    if (!todayKey) return;
+    const saved = localStorage.getItem("prieresByDay");
     if (saved) {
       try {
         const parsed: DayCount[] = JSON.parse(saved);
-        const todayRow = parsed.find((d) => d.date === k);
+        setDays(parsed);
+        const todayRow = parsed.find((d) => d.date === todayKey);
         setTodayCount(todayRow ? todayRow.count : 0);
       } catch {
+        setDays([]);
         setTodayCount(0);
       }
     }
-  }, []);
 
-  // persistance jours
-  useEffect(() => {
-    if (!hydrated) return;
-    safeSetItem("prieresByDay", JSON.stringify(days));
-  }, [days, hydrated]);
+    const savedTarget = localStorage.getItem("prieresDailyTarget");
+    if (savedTarget) {
+      const n = Number(savedTarget);
+      if (!Number.isNaN(n) && n > 0) setDailyTarget(n);
+    }
+    const savedStreak = localStorage.getItem("prieresStreak");
+    if (savedStreak) {
+      const n = Number(savedStreak);
+      if (!Number.isNaN(n) && n >= 0) setStreak(n);
+    }
+  }, [todayKey]);
 
-  // persistance objectif
   useEffect(() => {
-    if (!hydrated) return;
-    safeSetItem("prieresDailyTarget", String(dailyTarget));
-  }, [dailyTarget, hydrated]);
+    localStorage.setItem("prieresByDay", JSON.stringify(days));
+  }, [days]);
 
-  // persistance streak
   useEffect(() => {
-    if (!hydrated) return;
-    safeSetItem("prieresStreak", String(streak));
-  }, [streak, hydrated]);
+    localStorage.setItem("prieresDailyTarget", String(dailyTarget));
+  }, [dailyTarget]);
 
-  // recalcul du streak à partir de l'historique
   useEffect(() => {
-    if (!hydrated) return;
+    localStorage.setItem("prieresStreak", String(streak));
+  }, [streak]);
+
+  const incrementToday = () => {
+    if (!todayKey) return;
+    setDays((prev) => {
+      const existing = prev.find((d) => d.date === todayKey);
+      if (existing) {
+        return prev.map((d) => (d.date === todayKey ? { ...d, count: d.count + 1 } : d));
+      } else {
+        return [...prev, { date: todayKey, count: 1 }];
+      }
+    });
+    setTodayCount((c) => c + 1);
+  };
+
+  const editDayCount = (date: string) => {
+    const current = days.find((d) => d.date === date);
+    if (!current) return;
+    const input = prompt(`Nouveau nombre de prières pour le ${date} :`, String(current.count));
+    if (input === null) return;
+    const value = Number(input);
+    if (Number.isNaN(value) || value < 0) return;
+
+    setDays((prev) => prev.map((d) => (d.date === date ? { ...d, count: value } : d)));
+    if (date === todayKey) {
+      setTodayCount(value);
+    }
+  };
+
+  const deleteDay = (date: string) => {
+    const ok = confirm(`Supprimer les prières enregistrées pour le ${date} ?`);
+    if (!ok) return;
+    setDays((prev) => prev.filter((d) => d.date !== date));
+    if (date === todayKey) {
+      setTodayCount(0);
+    }
+  };
+
+  const totalAllTime = useMemo(() => days.reduce((sum, d) => sum + d.count, 0), [days]);
+
+  const lastFridayCount = lastFridayKey
+    ? (days.find((d) => d.date === lastFridayKey)?.count ?? 0)
+    : 0;
+
+  const comparePercent =
+    lastFridayCount === 0
+      ? todayCount > 0
+        ? 100
+        : 0
+      : Math.round(((todayCount - lastFridayCount) / lastFridayCount) * 100);
+
+  const sortedDays = useMemo(
+    () => [...days].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
+    [days],
+  );
+
+  const todayLabel =
+    today &&
+    today.toLocaleDateString("fr-FR", {
+      weekday: "long",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+
+  const lastFridayLabel =
+    lastFriday &&
+    lastFriday.toLocaleDateString("fr-FR", {
+      weekday: "long",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+
+  const isReady = !!today && !!todayKey && !!lastFriday && !!lastFridayKey;
+
+  const { weekCount, monthCount } = useMemo(() => {
+    if (!today) return { weekCount: 0, monthCount: 0 };
+    let wc = 0;
+    let mc = 0;
+    days.forEach((d) => {
+      const date = new Date(d.date);
+      if (isSameWeek(date, today)) wc += d.count;
+      if (isSameMonth(date, today)) mc += d.count;
+    });
+    return { weekCount: wc, monthCount: mc };
+  }, [days, today]);
+
+  useEffect(() => {
     if (!today || !todayKey) return;
     if (dailyTarget <= 0) {
       setStreak(0);
@@ -164,134 +208,26 @@ export default function PrieresPage() {
       cursor.setDate(cursor.getDate() - 1);
     }
     setStreak(currentStreak);
-  }, [days, today, todayKey, dailyTarget, hydrated]);
-
-  // useMemo calculs dérivés (toujours appelés, mais retournent du neutre si pas prêt)
-  const totalAllTime = useMemo(() => days.reduce((sum, d) => sum + d.count, 0), [days]);
-
-  const lastFridayCount = useMemo(() => {
-    if (!lastFridayKey) return 0;
-    return days.find((d) => d.date === lastFridayKey)?.count ?? 0;
-  }, [days, lastFridayKey]);
-
-  const comparePercent = useMemo(() => {
-    if (!hydrated) return 0;
-    if (lastFridayCount === 0) {
-      return todayCount > 0 ? 100 : 0;
-    }
-    return Math.round(((todayCount - lastFridayCount) / lastFridayCount) * 100);
-  }, [todayCount, lastFridayCount, hydrated]);
-
-  const sortedDays = useMemo(
-    () => [...days].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
-    [days],
-  );
-
-  const todayLabel = useMemo(() => {
-    if (!today) return "";
-    return today.toLocaleDateString("fr-FR", {
-      weekday: "long",
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    });
-  }, [today]);
-
-  const lastFridayLabel = useMemo(() => {
-    if (!lastFriday) return "";
-    return lastFriday.toLocaleDateString("fr-FR", {
-      weekday: "long",
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
-  }, [lastFriday]);
-
-  const { weekCount, monthCount } = useMemo(() => {
-    if (!today) return { weekCount: 0, monthCount: 0 };
-    let wc = 0;
-    let mc = 0;
-    days.forEach((d) => {
-      const date = new Date(d.date);
-      if (isSameWeek(date, today)) wc += d.count;
-      if (isSameMonth(date, today)) mc += d.count;
-    });
-    return { weekCount: wc, monthCount: mc };
-  }, [days, today]);
+  }, [days, today, todayKey, dailyTarget]);
 
   const progressToday =
     dailyTarget > 0 ? Math.min(100, Math.round((todayCount / dailyTarget) * 100)) : 0;
 
-  const isReady = hydrated && !!today && !!todayKey && !!lastFriday && !!lastFridayKey;
-
-  // ---------- handlers ----------
-
-  const incrementToday = () => {
-    if (!todayKey) return;
-    setDays((prev) => {
-      const existing = prev.find((d) => d.date === todayKey);
-      if (existing) {
-        const next = prev.map((d) => (d.date === todayKey ? { ...d, count: d.count + 1 } : d));
-        safeSetItem("prieresByDay", JSON.stringify(next));
-        return next;
-      } else {
-        const next = [...prev, { date: todayKey, count: 1 }];
-        safeSetItem("prieresByDay", JSON.stringify(next));
-        return next;
-      }
-    });
-    setTodayCount((c) => c + 1);
-  };
-
-  const editDayCount = (date: string) => {
-    const current = days.find((d) => d.date === date);
-    if (!current) return;
-    const input = prompt(`Nouveau nombre de prières pour le ${date} :`, String(current.count));
-    if (input === null) return;
-    const value = Number(input);
-    if (Number.isNaN(value) || value < 0) return;
-
-    setDays((prev) => {
-      const next = prev.map((d) => (d.date === date ? { ...d, count: value } : d));
-      safeSetItem("prieresByDay", JSON.stringify(next));
-      return next;
-    });
-    if (date === todayKey) {
-      setTodayCount(value);
-    }
-  };
-
-  const deleteDay = (date: string) => {
-    const ok = confirm(`Supprimer les prières enregistrées pour le ${date} ?`);
-    if (!ok) return;
-    setDays((prev) => {
-      const next = prev.filter((d) => d.date !== date);
-      safeSetItem("prieresByDay", JSON.stringify(next));
-      return next;
-    });
-    if (date === todayKey) {
-      setTodayCount(0);
-    }
-  };
-
-  // ---------- rendu ----------
-
   return (
-    <main className="app-container">
-      <Link href="/" className="btn btn-secondary">
+    <main>
+      <Link href="/" className="btn">
         ← Accueil
       </Link>
 
       <h1>Prières sur le Prophète ﷺ</h1>
       <p style={{ textAlign: "center", marginBottom: "1rem", color: "#666" }}>
-        {hydrated ? todayLabel || "Chargement de la date..." : "Chargement de la date..."}
+        {todayLabel || "Chargement de la date..."}
       </p>
 
-      {/* Objectif journalier + streak */}
       <section className="list-item" style={{ marginBottom: "1rem" }}>
-        <h2>Objectif & série</h2>
+        <h2>Objectif du jour</h2>
         <p style={{ fontSize: "0.9rem", marginBottom: "0.3rem" }}>
-          Objectif du jour : <strong>{dailyTarget}</strong> prières sur le Prophète ﷺ
+          Objectif : <strong>{dailyTarget}</strong> prières
         </p>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           <input
@@ -305,21 +241,19 @@ export default function PrieresPage() {
             placeholder="Objectif"
           />
           <span style={{ fontSize: "0.9rem", color: "#4b5563" }}>
-            Série actuelle : <strong>{streak}</strong> jour
-            {streak > 1 ? "s" : ""} d&apos;objectif atteint
+            Série actuelle : <strong>{streak}</strong> jour{streak > 1 ? "s" : ""} d&apos;objectif
+            atteint
           </span>
         </div>
       </section>
 
-      {/* Bouton principal + recap jour */}
       <section className="list-item" style={{ marginBottom: "1rem" }}>
         <h2>Compteur du jour</h2>
-        <div className="counter">{hydrated ? todayCount : 0} prières aujourd&apos;hui</div>
+        <div className="counter">{todayCount} prières aujourd&apos;hui</div>
         <p style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>
           Clique sur le bouton à chaque fois que tu fais une prière sur le Prophète ﷺ.
         </p>
 
-        {/* barre de progression */}
         <div
           style={{
             marginTop: "0.2rem",
@@ -336,7 +270,7 @@ export default function PrieresPage() {
           >
             <div
               style={{
-                width: `${hydrated ? progressToday : 0}%`,
+                width: `${progressToday}%`,
                 background: "linear-gradient(90deg, rgba(56,189,248,1), rgba(129,140,248,1))",
                 height: "100%",
                 transition: "width 0.2s ease-out",
@@ -350,7 +284,7 @@ export default function PrieresPage() {
               color: "#6b7280",
             }}
           >
-            {hydrated ? progressToday : 0}% de ton objectif d&apos;aujourd&apos;hui
+            {progressToday}% de ton objectif d&apos;aujourd&apos;hui
           </p>
         </div>
 
@@ -377,17 +311,36 @@ export default function PrieresPage() {
               justifyContent: "center",
               textShadow: "0 1px 2px rgba(0,0,0,0.35)",
             }}
+            onMouseDown={(e) => {
+              if (!isReady) return;
+              const btn = e.currentTarget as HTMLButtonElement;
+              btn.style.transform = "scale(0.95) translateY(2px)";
+              btn.style.boxShadow = "0 10px 20px rgba(148, 126, 176, 0.4)";
+              btn.style.filter = "brightness(0.95)";
+            }}
+            onMouseUp={(e) => {
+              if (!isReady) return;
+              const btn = e.currentTarget as HTMLButtonElement;
+              btn.style.transform = "scale(1) translateY(0)";
+              btn.style.boxShadow = "0 18px 35px rgba(148, 126, 176, 0.45)";
+              btn.style.filter = "brightness(1)";
+            }}
+            onMouseLeave={(e) => {
+              const btn = e.currentTarget as HTMLButtonElement;
+              btn.style.transform = "scale(1) translateY(0)";
+              btn.style.boxShadow = "0 18px 35px rgba(148, 126, 176, 0.45)";
+              btn.style.filter = "brightness(1)";
+            }}
           >
             +1
           </button>
         </div>
       </section>
 
-      {/* Récap global + semaine / mois */}
       <section className="list-item" style={{ marginBottom: "1rem" }}>
-        <h2>Récap global</h2>
+        <h2>Récap rapide</h2>
         <p style={{ fontSize: "0.9rem", marginBottom: "0.3rem" }}>
-          Total depuis le début : <strong>{totalAllTime}</strong> prières
+          Total : <strong>{totalAllTime}</strong> prières
         </p>
         <p style={{ fontSize: "0.9rem", marginBottom: "0.3rem" }}>
           Cette semaine : <strong>{weekCount}</strong> prières
@@ -395,19 +348,17 @@ export default function PrieresPage() {
         <p style={{ fontSize: "0.9rem" }}>
           Ce mois-ci : <strong>{monthCount}</strong> prières
         </p>
-        <p style={{ fontSize: "0.9rem", marginTop: "0.5rem" }}>
-          Dernier vendredi ({hydrated ? lastFridayLabel || "..." : "..."}):{" "}
-          <strong>{lastFridayCount}</strong> prières
+        <p style={{ fontSize: "0.8rem", marginTop: "0.15rem", color: "#777" }}>
+          Détail complet dans la page Récap globale.
         </p>
       </section>
 
-      {/* Comparatif vs vendredi dernier */}
       <section className="list-item" style={{ marginBottom: "1rem" }}>
-        <h2>Comparatif avec vendredi dernier</h2>
+        <h2>Comparatif vendredi</h2>
         <p style={{ fontSize: "0.9rem", marginBottom: "0.35rem" }}>
           Aujourd&apos;hui : <strong>{todayCount}</strong> prières
           <br />
-          Vendredi dernier : <strong>{lastFridayCount}</strong> prières
+          Vendredi dernier ({lastFridayLabel || "..."}) : <strong>{lastFridayCount}</strong> prières
         </p>
         <p
           style={{
@@ -420,7 +371,6 @@ export default function PrieresPage() {
         </p>
       </section>
 
-      {/* Historique par jour */}
       <section className="list-item" style={{ marginBottom: "1.5rem" }}>
         <h2>Historique par jour</h2>
         {sortedDays.length === 0 && (
@@ -515,6 +465,12 @@ export default function PrieresPage() {
             </div>
           );
         })}
+      </section>
+
+      <section style={{ marginTop: "1rem", marginBottom: "1.5rem" }}>
+        <Link href="/recap" className="btn">
+          Voir le récap global
+        </Link>
       </section>
     </main>
   );
