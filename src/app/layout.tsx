@@ -1,19 +1,17 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
-import Link from "next/link";
+import type { ReactNode } from "react";
+import ReactQueryProvider from "./ReactQueryProvider";
+import ToastContainerClient from "@/components/ToastContainerClient";
 
-const inter = Inter({ subsets: ["latin"] });
-
-export const metadata: Metadata = {
-  title: "Islam PWA",
-  description: "Tracker islamique PWA",
-};
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr">
-      <body className={inter.className}>{children}</body>
+      <body>
+        <ReactQueryProvider>
+          {children}
+          <ToastContainerClient />
+        </ReactQueryProvider>
+      </body>
     </html>
   );
 }

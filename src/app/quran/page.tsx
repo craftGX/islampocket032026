@@ -2,6 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { toast } from "react-toastify";
+import { motion } from "framer-motion";
 
 type QuranEntry = {
   id: string;
@@ -46,7 +48,6 @@ const HIZB_PER_DAY_TARGET = 4;
 
 export default function QuranTracker() {
   const [entries, setEntries] = useState<QuranEntry[]>([]);
-  const [khatmTargetDate, setKhatmTargetDate] = useState<string>("");
 
   const [hizbNumber, setHizbNumber] = useState<number | "">("");
   const [sourateName, setSourateName] = useState("");
@@ -88,7 +89,10 @@ export default function QuranTracker() {
   }, [entries]);
 
   const addHizb = () => {
-    if (hizbNumber === "" || Number(hizbNumber) <= 0 || !today) return;
+    if (hizbNumber === "" || Number(hizbNumber) <= 0 || !today) {
+      toast.error("Merci d’indiquer un numéro de hizb valide.");
+      return;
+    }
 
     const entry: QuranEntry = {
       id: crypto.randomUUID(),
@@ -99,24 +103,15 @@ export default function QuranTracker() {
 
     setEntries((prev) => [entry, ...prev]);
     setHizbNumber("");
+    toast.success("Hizb enregistré ✅");
   };
-
-  const khatmStats = useMemo(() => {
-    if (!today || !khatmTargetDate) return null;
-    const target = new Date(khatmTargetDate);
-    if (target <= today) return null;
-
-    const daysLeft = Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
-    const totalHizbForKhatm = 60;
-    const hizbPerDayNeeded = Math.ceil(totalHizbForKhatm / daysLeft);
-
-    return { daysLeft, hizbPerDayNeeded };
-  }, [today, khatmTargetDate]);
 
   const addSourate = () => {
     if (!today) return;
-    if (!sourateName.trim() || repetitions === "" || Number(repetitions) <= 0) return;
+    if (!sourateName.trim() || repetitions === "" || Number(repetitions) <= 0) {
+      toast.error("Merci de remplir le nom et le nombre de répétitions.");
+      return;
+    }
 
     const entry: QuranEntry = {
       id: crypto.randomUUID(),
@@ -129,6 +124,7 @@ export default function QuranTracker() {
     setEntries((prev) => [entry, ...prev]);
     setSourateName("");
     setRepetitions("");
+    toast.success("Sourate enregistrée ✅");
   };
 
   const deleteEntry = (id: string) => {
@@ -137,6 +133,7 @@ export default function QuranTracker() {
       setEditingId(null);
       setEditingType(null);
     }
+    toast.success("Entrée supprimée.");
   };
 
   const startEditSourate = (entry: QuranEntry) => {
@@ -157,17 +154,21 @@ export default function QuranTracker() {
   const saveEdit = () => {
     if (!editingId || !editingType) return;
 
+    let updated = false;
+
     setEntries((prev) =>
       prev.map((e) => {
         if (e.id !== editingId) return e;
 
         if (editingType === "hizb") {
           if (hizbNumber === "" || Number(hizbNumber) <= 0) return e;
+          updated = true;
           return { ...e, hizbNumber: Number(hizbNumber) };
         }
 
         if (!sourateName.trim() || repetitions === "" || Number(repetitions) <= 0) return e;
 
+        updated = true;
         return {
           ...e,
           sourateName: sourateName.trim(),
@@ -175,6 +176,12 @@ export default function QuranTracker() {
         };
       }),
     );
+
+    if (updated) {
+      toast.success("Modification enregistrée ✅");
+    } else {
+      toast.error("Impossible d’enregistrer la modification.");
+    }
 
     setEditingId(null);
     setEditingType(null);
@@ -310,12 +317,24 @@ export default function QuranTracker() {
         ← Accueil
       </Link>
 
-      <h1>Quran Tracker</h1>
+      <motion.h1
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        Quran Tracker
+      </motion.h1>
       <p style={{ textAlign: "center", marginBottom: "1rem", color: "#666" }}>
         {todayLabel || "Chargement de la date..."}
       </p>
 
-      <section className="list-item" style={{ marginBottom: "1rem" }}>
+      <motion.section
+        className="list-item"
+        style={{ marginBottom: "1rem" }}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
         <h2>Progression hebdomadaire</h2>
         <p style={{ fontSize: "0.9rem", marginBottom: "0.3rem" }}>
           Semaine du {weekLabel || "..."}
@@ -344,10 +363,7 @@ export default function QuranTracker() {
         <p style={{ fontSize: "0.85rem", marginTop: "0.25rem", color: "#555" }}>
           Total {currentYear ?? "..."} : <strong>{yearHizbCount}</strong> hizb
         </p>
-        <p style={{ fontSize: "0.8rem", marginTop: "0.15rem", color: "#777" }}>
-          Détails avancés dans la page Récap globale.
-        </p>
-      </section>
+      </motion.section>
 
       {/* Saisie hizb */}
       <section className="list-item">
@@ -397,7 +413,7 @@ export default function QuranTracker() {
         </p>
       </section>
 
-      {/* Saisie sourates */}
+      {/* Sourates */}
       <section className="list-item" style={{ marginTop: "1rem" }}>
         <h2>Sourates travaillées</h2>
         <div
@@ -548,26 +564,7 @@ export default function QuranTracker() {
           })()}
       </section>
 
-      {/* Objectif khatam (conservé ici car lié à la saisie) */}
-      <section className="list-item" style={{ marginBottom: "1.5rem", marginTop: "1.5rem" }}>
-        <h2>Objectif khatam</h2>
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-          <input
-            type="date"
-            className="input"
-            value={khatmTargetDate}
-            onChange={(e) => setKhatmTargetDate(e.target.value)}
-          />
-        </div>
-        {khatmStats && (
-          <p style={{ fontSize: "0.9rem", marginTop: "0.4rem" }}>
-            Il te reste <strong>{khatmStats.daysLeft}</strong> jours, il faut environ{" "}
-            <strong>{khatmStats.hizbPerDayNeeded}</strong> hizb / jour.
-          </p>
-        )}
-      </section>
-
-      {/* Modal jour (inchangé) */}
+      {/* Modal jour */}
       {selectedDayKey && (
         <div
           onClick={() => setSelectedDayKey(null)}

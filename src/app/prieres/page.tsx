@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { toast } from "react-toastify";
+import { motion } from "framer-motion";
 
 type DayCount = {
   date: string;
@@ -112,6 +114,7 @@ export default function PrieresPage() {
       }
     });
     setTodayCount((c) => c + 1);
+    toast.success("Une prière ajoutée ✅");
   };
 
   const editDayCount = (date: string) => {
@@ -120,12 +123,16 @@ export default function PrieresPage() {
     const input = prompt(`Nouveau nombre de prières pour le ${date} :`, String(current.count));
     if (input === null) return;
     const value = Number(input);
-    if (Number.isNaN(value) || value < 0) return;
+    if (Number.isNaN(value) || value < 0) {
+      toast.error("Valeur invalide.");
+      return;
+    }
 
     setDays((prev) => prev.map((d) => (d.date === date ? { ...d, count: value } : d)));
     if (date === todayKey) {
       setTodayCount(value);
     }
+    toast.success("Valeur mise à jour ✅");
   };
 
   const deleteDay = (date: string) => {
@@ -135,6 +142,7 @@ export default function PrieresPage() {
     if (date === todayKey) {
       setTodayCount(0);
     }
+    toast.success("Jour supprimé.");
   };
 
   const totalAllTime = useMemo(() => days.reduce((sum, d) => sum + d.count, 0), [days]);
@@ -219,12 +227,24 @@ export default function PrieresPage() {
         ← Accueil
       </Link>
 
-      <h1>Prières sur le Prophète ﷺ</h1>
+      <motion.h1
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        Prières sur le Prophète ﷺ
+      </motion.h1>
       <p style={{ textAlign: "center", marginBottom: "1rem", color: "#666" }}>
         {todayLabel || "Chargement de la date..."}
       </p>
 
-      <section className="list-item" style={{ marginBottom: "1rem" }}>
+      <motion.section
+        className="list-item"
+        style={{ marginBottom: "1rem" }}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
         <h2>Objectif du jour</h2>
         <p style={{ fontSize: "0.9rem", marginBottom: "0.3rem" }}>
           Objectif : <strong>{dailyTarget}</strong> prières
@@ -241,11 +261,11 @@ export default function PrieresPage() {
             placeholder="Objectif"
           />
           <span style={{ fontSize: "0.9rem", color: "#4b5563" }}>
-            Série actuelle : <strong>{streak}</strong> jour{streak > 1 ? "s" : ""} d&apos;objectif
-            atteint
+            Série actuelle : <strong>{streak}</strong> jour
+            {streak > 1 ? "s" : ""} d&apos;objectif atteint
           </span>
         </div>
-      </section>
+      </motion.section>
 
       <section className="list-item" style={{ marginBottom: "1rem" }}>
         <h2>Compteur du jour</h2>
