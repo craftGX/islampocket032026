@@ -41,9 +41,8 @@ function isSameMonth(a: Date, b: Date) {
 }
 
 export default function PrieresPage() {
+  // état principal
   const [days, setDays] = useState<DayCount[]>([]);
-  const [todayCount, setTodayCount] = useState(0);
-
   const [today, setToday] = useState<Date | null>(null);
   const [todayKey, setTodayKey] = useState<string>("");
   const [lastFriday, setLastFriday] = useState<Date | null>(null);
@@ -52,6 +51,7 @@ export default function PrieresPage() {
   const [dailyTarget, setDailyTarget] = useState<number>(100);
   const [streak, setStreak] = useState<number>(0);
 
+  // 1) Init dates
   useEffect(() => {
     const t = new Date();
     const k = formatDateISO(t);
@@ -64,56 +64,80 @@ export default function PrieresPage() {
     setLastFridayKey(lfKey);
   }, []);
 
+  // 2) Lecture des données depuis localStorage au mount
   useEffect(() => {
+    if (typeof window === "undefined") return;
     if (!todayKey) return;
-    const saved = localStorage.getItem("prieresByDay");
-    if (saved) {
-      try {
-        const parsed: DayCount[] = JSON.parse(saved);
-        setDays(parsed);
-        const todayRow = parsed.find((d) => d.date === todayKey);
-        setTodayCount(todayRow ? todayRow.count : 0);
-      } catch {
-        setDays([]);
-        setTodayCount(0);
-      }
-    }
 
-    const savedTarget = localStorage.getItem("prieresDailyTarget");
-    if (savedTarget) {
-      const n = Number(savedTarget);
-      if (!Number.isNaN(n) && n > 0) setDailyTarget(n);
-    }
-    const savedStreak = localStorage.getItem("prieresStreak");
-    if (savedStreak) {
-      const n = Number(savedStreak);
-      if (!Number.isNaN(n) && n >= 0) setStreak(n);
+    try {
+      const savedDays = window.localStorage.getItem("prieresByDay");
+      if (savedDays) {
+        const parsed: DayCount[] = JSON.parse(savedDays);
+        setDays(parsed);
+      }
+
+      const savedTarget = window.localStorage.getItem("prieresDailyTarget");
+      if (savedTarget) {
+        const n = Number(savedTarget);
+        if (!Number.isNaN(n) && n > 0) setDailyTarget(n);
+      }
+
+      const savedStreak = window.localStorage.getItem("prieresStreak");
+      if (savedStreak) {
+        const n = Number(savedStreak);
+        if (!Number.isNaN(n) && n >= 0) setStreak(n);
+      }
+    } catch (e) {
+      console.error("Erreur lecture localStorage prières :", e);
+      setDays([]);
     }
   }, [todayKey]);
 
+  // 3) Sauvegarde automatique dans localStorage quand le state change
   useEffect(() => {
-    localStorage.setItem("prieresByDay", JSON.stringify(days));
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem("prieresByDay", JSON.stringify(days));
+    } catch (e) {
+      console.error("Erreur écriture prieresByDay :", e);
+    }
   }, [days]);
 
   useEffect(() => {
-    localStorage.setItem("prieresDailyTarget", String(dailyTarget));
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem("prieresDailyTarget", String(dailyTarget));
+    } catch (e) {
+      console.error("Erreur écriture prieresDailyTarget :", e);
+    }
   }, [dailyTarget]);
 
   useEffect(() => {
-    localStorage.setItem("prieresStreak", String(streak));
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem("prieresStreak", String(streak));
+    } catch (e) {
+      console.error("Erreur écriture prieresStreak :", e);
+    }
   }, [streak]);
 
+  // 4) todayCount dérivé de days (une seule source de vérité)
+  const todayCount = useMemo(() => {
+    if (!todayKey) return 0;
+    const row = days.find((d) => d.date === todayKey);
+    return row?.count ?? 0;
+  }, [days, todayKey]);
+
+  // 5) actions
   const incrementToday = () => {
     if (!todayKey) return;
     setDays((prev) => {
       const existing = prev.find((d) => d.date === todayKey);
       if (existing) {
         return prev.map((d) => (d.date === todayKey ? { ...d, count: d.count + 1 } : d));
-      } else {
-        return [...prev, { date: todayKey, count: 1 }];
       }
+      return [...prev, { date: todayKey, count: 1 }];
     });
-    setTodayCount((c) => c + 1);
     toast.success("Une prière ajoutée ✅");
   };
 
@@ -129,9 +153,6 @@ export default function PrieresPage() {
     }
 
     setDays((prev) => prev.map((d) => (d.date === date ? { ...d, count: value } : d)));
-    if (date === todayKey) {
-      setTodayCount(value);
-    }
     toast.success("Valeur mise à jour ✅");
   };
 
@@ -139,12 +160,10 @@ export default function PrieresPage() {
     const ok = confirm(`Supprimer les prières enregistrées pour le ${date} ?`);
     if (!ok) return;
     setDays((prev) => prev.filter((d) => d.date !== date));
-    if (date === todayKey) {
-      setTodayCount(0);
-    }
     toast.success("Jour supprimé.");
   };
 
+  // 6) stats
   const totalAllTime = useMemo(() => days.reduce((sum, d) => sum + d.count, 0), [days]);
 
   const lastFridayCount = lastFridayKey
@@ -195,6 +214,7 @@ export default function PrieresPage() {
     return { weekCount: wc, monthCount: mc };
   }, [days, today]);
 
+  // recalcul streak
   useEffect(() => {
     if (!today || !todayKey) return;
     if (dailyTarget <= 0) {
@@ -221,6 +241,7 @@ export default function PrieresPage() {
   const progressToday =
     dailyTarget > 0 ? Math.min(100, Math.round((todayCount / dailyTarget) * 100)) : 0;
 
+  // 7) rendu
   return (
     <main>
       <Link href="/" className="btn">
@@ -330,26 +351,6 @@ export default function PrieresPage() {
               alignItems: "center",
               justifyContent: "center",
               textShadow: "0 1px 2px rgba(0,0,0,0.35)",
-            }}
-            onMouseDown={(e) => {
-              if (!isReady) return;
-              const btn = e.currentTarget as HTMLButtonElement;
-              btn.style.transform = "scale(0.95) translateY(2px)";
-              btn.style.boxShadow = "0 10px 20px rgba(148, 126, 176, 0.4)";
-              btn.style.filter = "brightness(0.95)";
-            }}
-            onMouseUp={(e) => {
-              if (!isReady) return;
-              const btn = e.currentTarget as HTMLButtonElement;
-              btn.style.transform = "scale(1) translateY(0)";
-              btn.style.boxShadow = "0 18px 35px rgba(148, 126, 176, 0.45)";
-              btn.style.filter = "brightness(1)";
-            }}
-            onMouseLeave={(e) => {
-              const btn = e.currentTarget as HTMLButtonElement;
-              btn.style.transform = "scale(1) translateY(0)";
-              btn.style.boxShadow = "0 18px 35px rgba(148, 126, 176, 0.45)";
-              btn.style.filter = "brightness(1)";
             }}
           >
             +1

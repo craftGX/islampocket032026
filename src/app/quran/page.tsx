@@ -7,7 +7,7 @@ import { motion } from "framer-motion";
 
 type QuranEntry = {
   id: string;
-  date: string;
+  date: string; // YYYY-MM-DD local
   type: "hizb" | "sourate";
   hizbNumber?: number;
   sourateName?: string;
@@ -15,7 +15,7 @@ type QuranEntry = {
 };
 
 function startOfWeekMonday(d: Date) {
-  const date = new Date(d);
+  const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const day = date.getDay();
   const diff = day === 0 ? -6 : 1 - day;
   date.setDate(date.getDate() + diff);
@@ -39,8 +39,8 @@ function isSameMonth(a: Date, b: Date) {
 
 function toYMD(d: Date) {
   const year = d.getFullYear();
-  const month = (d.getMonth() + 1).toString().padStart(2, "0");
-  const day = d.getDate().toString().padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
@@ -65,16 +65,18 @@ export default function QuranTracker() {
 
   useEffect(() => {
     const t = new Date();
-    const ws = startOfWeekMonday(t);
-    const ms = startOfMonth(t);
-    setToday(t);
+    const localToday = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+    const ws = startOfWeekMonday(localToday);
+    const ms = startOfMonth(localToday);
+    setToday(localToday);
     setWeekStart(ws);
     setMonthStart(ms);
-    setCurrentYear(t.getFullYear());
+    setCurrentYear(localToday.getFullYear());
   }, []);
 
   useEffect(() => {
-    const saved = localStorage.getItem("quranEntries");
+    if (typeof window === "undefined") return;
+    const saved = window.localStorage.getItem("quranEntries");
     if (saved) {
       try {
         setEntries(JSON.parse(saved));
@@ -85,18 +87,19 @@ export default function QuranTracker() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("quranEntries", JSON.stringify(entries));
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("quranEntries", JSON.stringify(entries));
   }, [entries]);
 
   const addHizb = () => {
-    if (hizbNumber === "" || Number(hizbNumber) <= 0 || !today) {
+    if (!today || hizbNumber === "" || Number(hizbNumber) <= 0) {
       toast.error("Merci d’indiquer un numéro de hizb valide.");
       return;
     }
 
     const entry: QuranEntry = {
       id: crypto.randomUUID(),
-      date: today.toISOString(),
+      date: toYMD(today),
       type: "hizb",
       hizbNumber: Number(hizbNumber),
     };
@@ -115,7 +118,7 @@ export default function QuranTracker() {
 
     const entry: QuranEntry = {
       id: crypto.randomUUID(),
-      date: today.toISOString(),
+      date: toYMD(today),
       type: "sourate",
       sourateName: sourateName.trim(),
       repetitions: Number(repetitions),
@@ -190,35 +193,27 @@ export default function QuranTracker() {
     setRepetitions("");
   };
 
-  const { weekHizbCount, monthHizbCount, yearHizbCount, weekHizbNumbers } = useMemo(() => {
+  const { weekHizbCount, monthHizbCount, yearHizbCount } = useMemo(() => {
     if (!today || !currentYear || !weekStart || !monthStart) {
       return {
         weekHizbCount: 0,
         monthHizbCount: 0,
         yearHizbCount: 0,
-        weekHizbNumbers: [] as number[],
       };
     }
 
     let weekHizbCount = 0;
     let monthHizbCount = 0;
     let yearHizbCount = 0;
-    const weekHizbNumbers: number[] = [];
 
     entries.forEach((e) => {
-      const d = new Date(e.date);
+      const d = new Date(e.date + "T00:00:00");
       const inYear = d.getFullYear() === currentYear;
       const inWeek = isSameWeek(d, today);
       const inMonth = isSameMonth(d, today);
 
       if (e.type === "hizb") {
-        const num = e.hizbNumber ?? 0;
-
-        if (inWeek) {
-          weekHizbCount += 1;
-          if (num > 0) weekHizbNumbers.push(num);
-        }
-
+        if (inWeek) weekHizbCount += 1;
         if (inMonth) monthHizbCount += 1;
         if (inYear) yearHizbCount += 1;
       }
@@ -228,7 +223,6 @@ export default function QuranTracker() {
       weekHizbCount,
       monthHizbCount,
       yearHizbCount,
-      weekHizbNumbers,
     };
   }, [entries, currentYear, today, weekStart, monthStart]);
 
@@ -266,10 +260,11 @@ export default function QuranTracker() {
 
   const entriesByDay = useMemo(() => {
     const map = new Map<string, QuranEntry[]>();
+    if (!today) return map;
     entries.forEach((e) => {
-      const d = new Date(e.date);
-      if (!today || !isSameWeek(d, today)) return;
-      const key = toYMD(d);
+      const d = new Date(e.date + "T00:00:00");
+      if (!isSameWeek(d, today)) return;
+      const key = e.date; // déjà YYYY-MM-DD
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     });
@@ -289,6 +284,8 @@ export default function QuranTracker() {
       [key: string]: {
         hizbCount: number;
         hizbNumbers: number[];
+        sourateCount: number;
+        sourateNames: { name: string; repetitions: number }[];
       };
     } = {};
 
@@ -296,12 +293,21 @@ export default function QuranTracker() {
       const key = toYMD(d);
       const dayEntries = entriesByDay.get(key) || [];
       const hizbEntries = dayEntries.filter((e) => e.type === "hizb");
+      const sourateEntries = dayEntries.filter((e) => e.type === "sourate");
+
       result[key] = {
         hizbCount: hizbEntries.length,
         hizbNumbers: hizbEntries
           .map((e) => e.hizbNumber ?? 0)
           .filter((n) => n > 0)
           .sort((a, b) => a - b),
+        sourateCount: sourateEntries.length,
+        sourateNames: sourateEntries
+          .filter((e) => e.sourateName && e.repetitions != null)
+          .map((e) => ({
+            name: e.sourateName as string,
+            repetitions: e.repetitions as number,
+          })),
       };
     });
 
@@ -477,7 +483,9 @@ export default function QuranTracker() {
 
         {today &&
           (() => {
-            const currentWeekEntries = entries.filter((e) => isSameWeek(new Date(e.date), today));
+            const currentWeekEntries = entries.filter((e) =>
+              isSameWeek(new Date(e.date + "T00:00:00"), today),
+            );
 
             if (currentWeekEntries.length === 0) {
               return (
@@ -490,7 +498,7 @@ export default function QuranTracker() {
             return (
               <div className="list-item" style={{ marginTop: "0.5rem" }}>
                 {currentWeekEntries.map((e) => {
-                  const d = new Date(e.date);
+                  const d = new Date(e.date + "T00:00:00");
                   return (
                     <div
                       key={e.id}
@@ -632,7 +640,7 @@ export default function QuranTracker() {
             </div>
 
             {(() => {
-              const dayDate = new Date(selectedDayKey);
+              const dayDate = new Date(selectedDayKey + "T00:00:00");
               const label = dayDate.toLocaleDateString("fr-FR", {
                 weekday: "long",
                 day: "2-digit",
@@ -642,6 +650,8 @@ export default function QuranTracker() {
               const stats = dayStats[selectedDayKey] || {
                 hizbCount: 0,
                 hizbNumbers: [],
+                sourateCount: 0,
+                sourateNames: [],
               };
 
               return (
@@ -655,12 +665,19 @@ export default function QuranTracker() {
                   >
                     {label}
                   </p>
-                  <p style={{ fontSize: "0.9rem", marginBottom: "0.6rem" }}>
-                    Hizb lus :{" "}
-                    <strong>
-                      {stats.hizbCount}/{HIZB_PER_DAY_TARGET}
-                    </strong>
+                  <p style={{ fontSize: "0.9rem", marginBottom: "0.3rem" }}>
+                    Hizb lus : <strong>{stats.hizbCount}</strong>
                     {stats.hizbNumbers.length > 0 && <> • Hizb : {stats.hizbNumbers.join(", ")}</>}
+                  </p>
+                  <p style={{ fontSize: "0.9rem", marginBottom: "0.6rem" }}>
+                    Sourates travaillées : <strong>{stats.sourateCount}</strong>
+                    {stats.sourateNames.length > 0 && (
+                      <>
+                        {" "}
+                        •{" "}
+                        {stats.sourateNames.map((s) => `${s.name} × ${s.repetitions}`).join(" | ")}
+                      </>
+                    )}
                   </p>
                 </>
               );

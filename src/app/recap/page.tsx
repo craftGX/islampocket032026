@@ -17,7 +17,7 @@ ChartJS.register(LineElement, PointElement, CategoryScale, LinearScale, Tooltip,
 
 type QuranEntry = {
   id: string;
-  date: string;
+  date: string; // YYYY-MM-DD
   type: "hizb" | "sourate";
   hizbNumber?: number;
   sourateName?: string;
@@ -25,7 +25,7 @@ type QuranEntry = {
 };
 
 type DayCount = {
-  date: string;
+  date: string; // YYYY-MM-DD
   count: number;
 };
 
@@ -43,17 +43,28 @@ function formatMonthLabel(key: string) {
   return d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
 }
 
+function toYMD(d: Date) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function RecapTotalCard() {
   const [quranEntries, setQuranEntries] = useState<QuranEntry[]>([]);
   const [prieresDays, setPrieresDays] = useState<DayCount[]>([]);
   const [today, setToday] = useState<Date | null>(null);
   const [selectedMonthKey, setSelectedMonthKey] = useState<string>("");
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
 
   useEffect(() => {
     const t = new Date();
-    setToday(t);
+    const localToday = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+    setToday(localToday);
 
-    const qSaved = typeof window !== "undefined" ? localStorage.getItem("quranEntries") : null;
+    if (typeof window === "undefined") return;
+
+    const qSaved = window.localStorage.getItem("quranEntries");
     if (qSaved) {
       try {
         setQuranEntries(JSON.parse(qSaved));
@@ -62,7 +73,7 @@ export default function RecapTotalCard() {
       }
     }
 
-    const pSaved = typeof window !== "undefined" ? localStorage.getItem("prieresByDay") : null;
+    const pSaved = window.localStorage.getItem("prieresByDay");
     if (pSaved) {
       try {
         setPrieresDays(JSON.parse(pSaved));
@@ -85,6 +96,9 @@ export default function RecapTotalCard() {
     monthlyHizb,
     monthlySalawat,
     currentYear,
+    hizbByDay,
+    souratesByDay,
+    salawatByDay,
   } = useMemo(() => {
     let totalHizbAllTime = 0;
     let totalSouratesAllTime = 0;
@@ -94,6 +108,7 @@ export default function RecapTotalCard() {
 
     const labels: string[] = [];
     const hizbByDay = new Map<string, number>();
+    const souratesByDay = new Map<string, { name: string; repetitions: number }[]>();
     const salawatByDay = new Map<string, number>();
 
     const monthlyHizb = new Map<string, number>();
@@ -114,6 +129,9 @@ export default function RecapTotalCard() {
         monthlyHizb,
         monthlySalawat,
         currentYear,
+        hizbByDay,
+        souratesByDay,
+        salawatByDay,
       };
     }
 
@@ -121,8 +139,8 @@ export default function RecapTotalCard() {
 
     // Quran entries
     quranEntries.forEach((e) => {
-      const d = new Date(e.date);
-      const dayKey = d.toISOString().slice(0, 10);
+      const d = new Date(e.date + "T00:00:00");
+      const dayKey = e.date; // déjà YYYY-MM-DD
       const monthKey = formatMonthKey(d);
 
       if (e.type === "hizb") {
@@ -133,12 +151,17 @@ export default function RecapTotalCard() {
       }
       if (e.type === "sourate") {
         totalSouratesAllTime += 1;
+        const list = souratesByDay.get(dayKey) || [];
+        if (e.sourateName && e.repetitions != null) {
+          list.push({ name: e.sourateName, repetitions: e.repetitions });
+        }
+        souratesByDay.set(dayKey, list);
       }
     });
 
-    // Prières sur le prophète
+    // Prières sur le Prophète
     prieresDays.forEach((d) => {
-      const date = new Date(d.date);
+      const date = new Date(d.date + "T00:00:00");
       const dayKey = d.date;
       const monthKey = formatMonthKey(date);
 
@@ -152,7 +175,6 @@ export default function RecapTotalCard() {
     for (let i = 6; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(today.getDate() - i);
-      const key = date.toISOString().slice(0, 10);
       const label = date.toLocaleDateString("fr-FR", {
         day: "2-digit",
         month: "2-digit",
@@ -163,14 +185,14 @@ export default function RecapTotalCard() {
     const chartDataHizb = labels.map((_, idx) => {
       const date = new Date(today);
       date.setDate(today.getDate() - (6 - idx));
-      const key = date.toISOString().slice(0, 10);
+      const key = toYMD(date);
       return hizbByDay.get(key) || 0;
     });
 
     const chartDataSalawat = labels.map((_, idx) => {
       const date = new Date(today);
       date.setDate(today.getDate() - (6 - idx));
-      const key = date.toISOString().slice(0, 10);
+      const key = toYMD(date);
       return salawatByDay.get(key) || 0;
     });
 
@@ -191,13 +213,17 @@ export default function RecapTotalCard() {
       monthlyHizb,
       monthlySalawat,
       currentYear,
+      hizbByDay,
+      souratesByDay,
+      salawatByDay,
     };
   }, [quranEntries, prieresDays, today]);
 
-  // Init mois sélectionné = mois courant
   useEffect(() => {
     if (today) {
-      setSelectedMonthKey(formatMonthKey(today));
+      const mk = formatMonthKey(today);
+      setSelectedMonthKey(mk);
+      setSelectedDayKey(toYMD(today));
     }
   }, [today]);
 
@@ -228,7 +254,6 @@ export default function RecapTotalCard() {
     ],
   };
 
-  // Comparaison mois sélectionné vs mois précédent (pour le petit bloc)
   const selectedStats = useMemo(() => {
     if (!selectedMonthKey) {
       return {
@@ -282,7 +307,6 @@ export default function RecapTotalCard() {
     };
   }, [selectedMonthKey, monthlyHizb, monthlySalawat]);
 
-  // Tableau annuel (année en cours, 12 lignes max)
   const yearlyRows = useMemo(() => {
     if (!currentYear) return [];
 
@@ -301,7 +325,6 @@ export default function RecapTotalCard() {
       const hizb = monthlyHizb.get(key) || 0;
       const salawat = monthlySalawat.get(key) || 0;
 
-      // mois précédent
       const prevDate = new Date(currentYear, monthIndex, 1);
       prevDate.setMonth(prevDate.getMonth() - 1);
       const prevKey = formatMonthKey(prevDate);
@@ -331,6 +354,53 @@ export default function RecapTotalCard() {
     return rows;
   }, [currentYear, monthlyHizb, monthlySalawat]);
 
+  const calendarDays = useMemo(() => {
+    if (!selectedMonthKey) return [];
+
+    const [yearStr, monthStr] = selectedMonthKey.split("-");
+    const y = Number(yearStr);
+    const m = Number(monthStr) - 1;
+
+    const firstDay = new Date(y, m, 1);
+    const lastDay = new Date(y, m + 1, 0);
+
+    const days: (Date | null)[] = [];
+
+    const startWeekday = (firstDay.getDay() + 6) % 7;
+    for (let i = 0; i < startWeekday; i++) {
+      days.push(null);
+    }
+
+    for (let d = firstDay.getDate(); d <= lastDay.getDate(); d++) {
+      days.push(new Date(y, m, d));
+    }
+
+    return days;
+  }, [selectedMonthKey]);
+
+  const selectedDayStats = useMemo(() => {
+    if (!selectedDayKey) return null;
+
+    const hizb = hizbByDay.get(selectedDayKey) || 0;
+    const sourates = souratesByDay.get(selectedDayKey) || [];
+    const salawat = salawatByDay.get(selectedDayKey) || 0;
+
+    return {
+      hizb,
+      sourates,
+      salawat,
+    };
+  }, [selectedDayKey, hizbByDay, souratesByDay, salawatByDay]);
+
+  const selectedDayLabel =
+    selectedDayKey &&
+    new Date(selectedDayKey + "T00:00:00").toLocaleDateString("fr-FR", {
+      weekday: "long",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+
   return (
     <motion.section
       initial={{ opacity: 0, y: 16 }}
@@ -344,7 +414,7 @@ export default function RecapTotalCard() {
       <h2>Récap total</h2>
       <p style={{ fontSize: "0.8rem", color: "#666", marginTop: "-0.25rem" }}>{monthLabel || ""}</p>
 
-      {/* Totaux globaux + ce mois-ci (origine) */}
+      {/* Totaux globaux + ce mois-ci */}
       <div
         style={{
           display: "grid",
@@ -391,7 +461,13 @@ export default function RecapTotalCard() {
             <select
               id="month-select"
               value={selectedMonthKey}
-              onChange={(e) => setSelectedMonthKey(e.target.value)}
+              onChange={(e) => {
+                const mk = e.target.value;
+                setSelectedMonthKey(mk);
+                const [y, m] = mk.split("-");
+                const d = new Date(Number(y), Number(m) - 1, 1);
+                setSelectedDayKey(toYMD(d));
+              }}
               style={{
                 fontSize: "0.8rem",
                 padding: "4px 6px",
@@ -466,7 +542,7 @@ export default function RecapTotalCard() {
         }}
       />
 
-      {/* Graphique 7 derniers jours (ton graphique d'origine) */}
+      {/* Graphique 7 derniers jours */}
       {chartLabels.length > 0 && (
         <div style={{ height: "160px" }}>
           <Line
@@ -494,7 +570,7 @@ export default function RecapTotalCard() {
         </div>
       )}
 
-      {/* SECTION EN BAS : tableau année en cours */}
+      {/* Tableau année en cours */}
       {yearlyRows.length > 0 && (
         <>
           <h3 style={{ fontSize: "0.95rem", marginTop: "0.8rem" }}>
@@ -561,6 +637,205 @@ export default function RecapTotalCard() {
             ))}
           </div>
         </>
+      )}
+
+      {/* Calendrier + récap jour */}
+      <h3 style={{ fontSize: "0.95rem", marginTop: "1rem" }}>Calendrier & récap journalier</h3>
+      <p style={{ fontSize: "0.8rem", color: "#777", marginBottom: "0.4rem" }}>
+        Mois sélectionné : {selectedStats.label || formatMonthLabel(selectedMonthKey)}
+      </p>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+          gap: "4px",
+          fontSize: "0.8rem",
+          marginBottom: "0.4rem",
+        }}
+      >
+        {["Lu", "Ma", "Me", "Je", "Ve", "Sa", "Di"].map((d) => (
+          <div key={d} style={{ textAlign: "center", fontWeight: 600, color: "#6b7280" }}>
+            {d}
+          </div>
+        ))}
+        {calendarDays.map((d, index) => {
+          if (!d) {
+            return <div key={`empty-${index}`} />;
+          }
+          const key = toYMD(d);
+          const hizb = hizbByDay.get(key) || 0;
+          const salawat = salawatByDay.get(key) || 0;
+          const hasSourates = (souratesByDay.get(key) || []).length > 0;
+          const hasActivity = hizb > 0 || salawat > 0 || hasSourates;
+          const isSelected = selectedDayKey === key;
+
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setSelectedDayKey(key)}
+              style={{
+                borderRadius: "8px",
+                border: isSelected ? "2px solid #4f46e5" : "1px solid #e5e7eb",
+                padding: "4px 2px",
+                backgroundColor: isSelected ? "#eef2ff" : "#ffffff",
+                cursor: "pointer",
+                minHeight: "42px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "2px",
+              }}
+            >
+              <span style={{ fontSize: "0.8rem", fontWeight: 600 }}>{d.getDate()}</span>
+              {hasActivity && (
+                <span
+                  style={{
+                    width: "6px",
+                    height: "6px",
+                    borderRadius: "999px",
+                    backgroundColor: "#22c55e",
+                  }}
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {selectedDayKey && selectedDayStats && (
+        <div
+          style={{
+            marginTop: "0.4rem",
+            padding: "6px 8px",
+            borderRadius: "8px",
+            border: "1px solid #e5e7eb",
+            fontSize: "0.8rem",
+          }}
+        >
+          <p style={{ margin: 0, fontWeight: 600 }}>{selectedDayLabel}</p>
+          <p style={{ margin: "2px 0" }}>
+            Hizb : <strong>{selectedDayStats.hizb}</strong>
+          </p>
+          <p style={{ margin: "2px 0" }}>
+            Sourates :{" "}
+            <strong>
+              {selectedDayStats.sourates.length > 0
+                ? selectedDayStats.sourates.map((s) => `${s.name} × ${s.repetitions}`).join(" | ")
+                : "Aucune"}
+            </strong>
+          </p>
+          <p style={{ margin: 0 }}>
+            Salat sur le Prophète ﷺ : <strong>{selectedDayStats.salawat}</strong>
+          </p>
+        </div>
+      )}
+
+      {selectedDayKey && selectedDayStats && (
+        <div
+          onClick={() => setSelectedDayKey(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(15,23,42,0.45)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "flex-end",
+            padding: "0.75rem",
+            zIndex: 50,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: "600px",
+              background: "#ffffff",
+              borderRadius: "1.25rem 1.25rem 0 0",
+              padding: "1rem 1rem 1.25rem",
+              maxHeight: "80vh",
+              overflowY: "auto",
+              boxShadow: "0 -10px 25px rgba(15,23,42,0.35)",
+            }}
+          >
+            <div
+              style={{
+                width: "48px",
+                height: "4px",
+                borderRadius: "999px",
+                background: "#e5e7eb",
+                margin: "0 auto 0.75rem",
+              }}
+            />
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "0.5rem",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "1.05rem",
+                  margin: 0,
+                }}
+              >
+                Récap de la journée
+              </h2>
+              <button
+                type="button"
+                onClick={() => setSelectedDayKey(null)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  fontSize: "1.1rem",
+                  cursor: "pointer",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <p
+              style={{
+                fontSize: "0.9rem",
+                color: "#4b5563",
+                marginBottom: "0.4rem",
+              }}
+            >
+              {selectedDayLabel}
+            </p>
+
+            <p style={{ fontSize: "0.9rem", marginBottom: "0.3rem" }}>
+              Hizb lus : <strong>{selectedDayStats.hizb}</strong>
+            </p>
+            <p style={{ fontSize: "0.9rem", marginBottom: "0.3rem" }}>
+              Sourates travaillées :{" "}
+              <strong>
+                {selectedDayStats.sourates.length > 0
+                  ? selectedDayStats.sourates.map((s) => `${s.name} × ${s.repetitions}`).join(" | ")
+                  : "Aucune"}
+              </strong>
+            </p>
+            <p style={{ fontSize: "0.9rem", marginBottom: "0.6rem" }}>
+              Salat sur le Prophète ﷺ : <strong>{selectedDayStats.salawat}</strong>
+            </p>
+
+            <div style={{ textAlign: "center", marginTop: "0.8rem" }}>
+              <button
+                type="button"
+                className="btn"
+                style={{ paddingInline: "1.2rem" }}
+                onClick={() => setSelectedDayKey(null)}
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </motion.section>
   );
