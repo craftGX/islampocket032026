@@ -116,11 +116,13 @@ export default function QuranTracker() {
       return;
     }
 
+    const normalizedName = sourateName.trim().toLowerCase(); // normalisation casse
+
     const entry: QuranEntry = {
       id: crypto.randomUUID(),
       date: toYMD(today),
       type: "sourate",
-      sourateName: sourateName.trim(),
+      sourateName: normalizedName,
       repetitions: Number(repetitions),
     };
 
@@ -171,10 +173,12 @@ export default function QuranTracker() {
 
         if (!sourateName.trim() || repetitions === "" || Number(repetitions) <= 0) return e;
 
+        const normalizedName = sourateName.trim().toLowerCase(); // normalisation casse
+
         updated = true;
         return {
           ...e,
-          sourateName: sourateName.trim(),
+          sourateName: normalizedName,
           repetitions: Number(repetitions),
         };
       }),
@@ -264,7 +268,7 @@ export default function QuranTracker() {
     entries.forEach((e) => {
       const d = new Date(e.date + "T00:00:00");
       if (!isSameWeek(d, today)) return;
-      const key = e.date; // déjà YYYY-MM-DD
+      const key = e.date; // YYYY-MM-DD
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     });
@@ -698,7 +702,7 @@ export default function QuranTracker() {
                       padding: "0.4rem 0",
                       borderTop: "1px solid #e5e7eb",
                       display: "flex",
-                      justifyContent: "space-between",
+                      justifyContent: "space_between",
                       gap: "0.5rem",
                     }}
                   >

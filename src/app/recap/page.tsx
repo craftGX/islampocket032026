@@ -140,7 +140,7 @@ export default function RecapTotalCard() {
     // Quran entries
     quranEntries.forEach((e) => {
       const d = new Date(e.date + "T00:00:00");
-      const dayKey = e.date; // déjà YYYY-MM-DD
+      const dayKey = e.date; // YYYY-MM-DD
       const monthKey = formatMonthKey(d);
 
       if (e.type === "hizb") {
@@ -153,6 +153,7 @@ export default function RecapTotalCard() {
         totalSouratesAllTime += 1;
         const list = souratesByDay.get(dayKey) || [];
         if (e.sourateName && e.repetitions != null) {
+          // ici le nom est déjà normalisé en minuscule côté saisie
           list.push({ name: e.sourateName, repetitions: e.repetitions });
         }
         souratesByDay.set(dayKey, list);
@@ -385,9 +386,20 @@ export default function RecapTotalCard() {
     const sourates = souratesByDay.get(selectedDayKey) || [];
     const salawat = salawatByDay.get(selectedDayKey) || 0;
 
+    // AGRÉGATION des sourates par nom (somme des répétitions)
+    const sourateMap = new Map<string, number>();
+    sourates.forEach((s) => {
+      const key = s.name.trim().toLowerCase();
+      sourateMap.set(key, (sourateMap.get(key) || 0) + (s.repetitions || 0));
+    });
+    const souratesMerged = Array.from(sourateMap.entries()).map(([name, repetitions]) => ({
+      name,
+      repetitions,
+    }));
+
     return {
       hizb,
-      sourates,
+      sourates: souratesMerged,
       salawat,
     };
   }, [selectedDayKey, hizbByDay, souratesByDay, salawatByDay]);
