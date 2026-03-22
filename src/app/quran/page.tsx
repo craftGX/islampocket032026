@@ -63,6 +63,10 @@ export default function QuranTracker() {
 
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
 
+  // modal confirmation suppression
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteLabel, setConfirmDeleteLabel] = useState<string>("");
+
   useEffect(() => {
     const t = new Date();
     const localToday = new Date(t.getFullYear(), t.getMonth(), t.getDate());
@@ -116,7 +120,7 @@ export default function QuranTracker() {
       return;
     }
 
-    const normalizedName = sourateName.trim().toLowerCase(); // normalisation casse
+    const normalizedName = sourateName.trim().toLowerCase(); // casse gérée ici
 
     const entry: QuranEntry = {
       id: crypto.randomUUID(),
@@ -139,6 +143,22 @@ export default function QuranTracker() {
       setEditingType(null);
     }
     toast.success("Entrée supprimée.");
+  };
+
+  const askDeleteEntry = (entry: QuranEntry) => {
+    const d = new Date(entry.date + "T00:00:00");
+    const dateLabel = d.toLocaleDateString("fr-FR", {
+      weekday: "short",
+      day: "2-digit",
+      month: "2-digit",
+    });
+    const label =
+      entry.type === "hizb"
+        ? `Hizb n°${entry.hizbNumber} (${dateLabel})`
+        : `${entry.sourateName} × ${entry.repetitions} (${dateLabel})`;
+
+    setConfirmDeleteId(entry.id);
+    setConfirmDeleteLabel(label);
   };
 
   const startEditSourate = (entry: QuranEntry) => {
@@ -173,7 +193,7 @@ export default function QuranTracker() {
 
         if (!sourateName.trim() || repetitions === "" || Number(repetitions) <= 0) return e;
 
-        const normalizedName = sourateName.trim().toLowerCase(); // normalisation casse
+        const normalizedName = sourateName.trim().toLowerCase();
 
         updated = true;
         return {
@@ -477,12 +497,11 @@ export default function QuranTracker() {
         </div>
       </section>
 
-      {/* Historique semaine actuelle rapide */}
+      {/* Historique semaine actuelle rapide (fusion par jour + sourates fusionnées) */}
       <section style={{ marginTop: "1.5rem" }}>
         <h2>Historique rapide (semaine)</h2>
         <p style={{ fontSize: "0.9rem", marginBottom: "0.4rem", color: "#777" }}>
-          Modifie ou supprime en cas d&apos;erreur. Le détail complet est dans la page Récap
-          globale.
+          Le détail complet est dans la page Récap globale.
         </p>
 
         {today &&
@@ -499,84 +518,102 @@ export default function QuranTracker() {
               );
             }
 
+            // groupage par jour + fusion des sourates
+            const groupedByDay = new Map<
+              string,
+              {
+                date: Date;
+                hizb: QuranEntry[];
+                souratesMerged: { name: string; totalRepetitions: number }[];
+              }
+            >();
+
+            currentWeekEntries.forEach((e) => {
+              const d = new Date(e.date + "T00:00:00");
+              const key = e.date;
+
+              if (!groupedByDay.has(key)) {
+                groupedByDay.set(key, {
+                  date: d,
+                  hizb: [],
+                  souratesMerged: [],
+                });
+              }
+
+              const group = groupedByDay.get(key)!;
+
+              if (e.type === "hizb") {
+                group.hizb.push(e);
+              } else if (e.type === "sourate" && e.sourateName && e.repetitions != null) {
+                const map = new Map<string, number>();
+                group.souratesMerged.forEach((s) => {
+                  map.set(s.name, s.totalRepetitions);
+                });
+                const nameKey = e.sourateName.trim().toLowerCase();
+                map.set(nameKey, (map.get(nameKey) || 0) + e.repetitions);
+                group.souratesMerged = Array.from(map.entries()).map(
+                  ([name, totalRepetitions]) => ({
+                    name,
+                    totalRepetitions,
+                  }),
+                );
+              }
+            });
+
+            const groupedDays = Array.from(groupedByDay.values()).sort(
+              (a, b) => b.date.getTime() - a.date.getTime(),
+            );
+
             return (
               <div className="list-item" style={{ marginTop: "0.5rem" }}>
-                {currentWeekEntries.map((e) => {
-                  const d = new Date(e.date + "T00:00:00");
-                  return (
-                    <div
-                      key={e.id}
+                {groupedDays.map((day) => (
+                  <div
+                    key={toYMD(day.date)}
+                    style={{
+                      padding: "0.4rem 0",
+                      borderTop: "1px solid #e5e7eb",
+                    }}
+                  >
+                    <p
                       style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: "0.5rem",
-                        padding: "0.25rem 0",
-                        borderTop: "1px solid #e5e7eb",
-                        marginTop: "0.15rem",
+                        margin: 0,
+                        fontWeight: 600,
+                        fontSize: "0.9rem",
                       }}
                     >
-                      <div>
-                        <p
-                          style={{
-                            margin: 0,
-                            fontWeight: 500,
-                            fontSize: "0.9rem",
-                          }}
-                        >
-                          {e.type === "hizb"
-                            ? `Hizb n°${e.hizbNumber}`
-                            : `${e.sourateName} × ${e.repetitions}`}
-                        </p>
-                        <p
-                          style={{
-                            margin: 0,
-                            fontSize: "0.8rem",
-                            color: "#666",
-                          }}
-                        >
-                          {d.toLocaleDateString("fr-FR", {
-                            weekday: "short",
-                            day: "2-digit",
-                            month: "2-digit",
-                          })}
-                        </p>
-                      </div>
-                      <div>
-                        <button
-                          className="btn"
-                          style={{
-                            paddingInline: "0.6rem",
-                            fontSize: "0.8rem",
-                            marginRight: "0.2rem",
-                          }}
-                          onClick={() =>
-                            e.type === "hizb" ? startEditHizb(e) : startEditSourate(e)
-                          }
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          className="btn"
-                          style={{
-                            paddingInline: "0.6rem",
-                            fontSize: "0.8rem",
-                            background: "#e02424",
-                          }}
-                          onClick={() => deleteEntry(e.id)}
-                        >
-                          🗑
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                      {day.date.toLocaleDateString("fr-FR", {
+                        weekday: "short",
+                        day: "2-digit",
+                        month: "2-digit",
+                      })}
+                    </p>
+
+                    {day.hizb.length > 0 && (
+                      <p style={{ margin: "0.15rem 0", fontSize: "0.85rem" }}>
+                        Hizb :{" "}
+                        {day.hizb
+                          .map((h) => (h.hizbNumber ? `n°${h.hizbNumber}` : ""))
+                          .filter(Boolean)
+                          .join(", ")}
+                      </p>
+                    )}
+
+                    {day.souratesMerged.length > 0 && (
+                      <p style={{ margin: "0.15rem 0", fontSize: "0.85rem" }}>
+                        Sourates :{" "}
+                        {day.souratesMerged
+                          .map((s) => `${s.name} × ${s.totalRepetitions}`)
+                          .join(" | ")}
+                      </p>
+                    )}
+                  </div>
+                ))}
               </div>
             );
           })()}
       </section>
 
-      {/* Modal jour */}
+      {/* Modal jour (détail déjà existant) */}
       {selectedDayKey && (
         <div
           onClick={() => setSelectedDayKey(null)}
@@ -702,7 +739,7 @@ export default function QuranTracker() {
                       padding: "0.4rem 0",
                       borderTop: "1px solid #e5e7eb",
                       display: "flex",
-                      justifyContent: "space_between",
+                      justifyContent: "space-between",
                       gap: "0.5rem",
                     }}
                   >
@@ -718,6 +755,30 @@ export default function QuranTracker() {
                           ? `Hizb n°${e.hizbNumber}`
                           : `${e.sourateName} × ${e.repetitions}`}
                       </p>
+                    </div>
+                    <div>
+                      <button
+                        className="btn"
+                        style={{
+                          paddingInline: "0.6rem",
+                          fontSize: "0.8rem",
+                          marginRight: "0.2rem",
+                        }}
+                        onClick={() => (e.type === "hizb" ? startEditHizb(e) : startEditSourate(e))}
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        className="btn"
+                        style={{
+                          paddingInline: "0.6rem",
+                          fontSize: "0.8rem",
+                          background: "#e02424",
+                        }}
+                        onClick={() => askDeleteEntry(e)}
+                      >
+                        🗑
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -743,6 +804,80 @@ export default function QuranTracker() {
           Voir le récap global
         </Link>
       </section>
+
+      {/* Modal confirmation suppression */}
+      {confirmDeleteId && (
+        <div
+          onClick={() => setConfirmDeleteId(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(15,23,42,0.45)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: "0.75rem",
+            zIndex: 60,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: "420px",
+              background: "#ffffff",
+              borderRadius: "1rem",
+              padding: "1rem 1.1rem 1.1rem",
+              boxShadow: "0 15px 35px rgba(15,23,42,0.45)",
+            }}
+          >
+            <h2
+              style={{
+                fontSize: "1rem",
+                margin: 0,
+                marginBottom: "0.5rem",
+              }}
+            >
+              Confirmer la suppression
+            </h2>
+            <p style={{ fontSize: "0.9rem", color: "#4b5563", marginBottom: "0.75rem" }}>
+              Veux-tu vraiment supprimer cette entrée ?
+              <br />
+              <strong>{confirmDeleteLabel}</strong>
+            </p>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "0.5rem",
+                marginTop: "0.25rem",
+              }}
+            >
+              <button
+                type="button"
+                className="btn"
+                style={{ background: "#e5e7eb", color: "#111827" }}
+                onClick={() => setConfirmDeleteId(null)}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                className="btn"
+                style={{ background: "#ef4444" }}
+                onClick={() => {
+                  if (confirmDeleteId) {
+                    deleteEntry(confirmDeleteId);
+                  }
+                  setConfirmDeleteId(null);
+                }}
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

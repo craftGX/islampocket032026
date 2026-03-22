@@ -153,7 +153,6 @@ export default function RecapTotalCard() {
         totalSouratesAllTime += 1;
         const list = souratesByDay.get(dayKey) || [];
         if (e.sourateName && e.repetitions != null) {
-          // ici le nom est déjà normalisé en minuscule côté saisie
           list.push({ name: e.sourateName, repetitions: e.repetitions });
         }
         souratesByDay.set(dayKey, list);
@@ -386,7 +385,7 @@ export default function RecapTotalCard() {
     const sourates = souratesByDay.get(selectedDayKey) || [];
     const salawat = salawatByDay.get(selectedDayKey) || 0;
 
-    // AGRÉGATION des sourates par nom (somme des répétitions)
+    // agrégation des sourates par nom (somme des répétitions)
     const sourateMap = new Map<string, number>();
     sourates.forEach((s) => {
       const key = s.name.trim().toLowerCase();
@@ -412,6 +411,30 @@ export default function RecapTotalCard() {
       month: "long",
       year: "numeric",
     });
+
+  // tableau par sourate pour le mois sélectionné
+  const souratesTable = useMemo(() => {
+    if (!selectedMonthKey) return [];
+
+    const [yearStr, monthStr] = selectedMonthKey.split("-");
+    const y = Number(yearStr);
+    const m = Number(monthStr) - 1;
+
+    const map = new Map<string, number>();
+
+    quranEntries.forEach((e) => {
+      if (e.type !== "sourate" || !e.sourateName || e.repetitions == null) return;
+      const d = new Date(e.date + "T00:00:00");
+      if (d.getFullYear() !== y || d.getMonth() !== m) return;
+
+      const key = e.sourateName.trim().toLowerCase();
+      map.set(key, (map.get(key) || 0) + e.repetitions);
+    });
+
+    return Array.from(map.entries())
+      .map(([name, total]) => ({ name, total }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [quranEntries, selectedMonthKey]);
 
   return (
     <motion.section
@@ -472,7 +495,7 @@ export default function RecapTotalCard() {
             </label>
             <select
               id="month-select"
-              value={selectedMonthKey}
+              value={selectedMonthKey || (monthKeysSorted[0] ?? "")}
               onChange={(e) => {
                 const mk = e.target.value;
                 setSelectedMonthKey(mk);
@@ -544,6 +567,47 @@ export default function RecapTotalCard() {
             </div>
           )}
         </>
+      )}
+
+      {/* Tableau des sourates du mois */}
+      {souratesTable.length > 0 && (
+        <div
+          style={{
+            marginTop: "0.6rem",
+            marginBottom: "0.6rem",
+            fontSize: "0.8rem",
+            borderRadius: "8px",
+            border: "1px solid #e5e7eb",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "2fr 1fr",
+              background: "#f3f4f6",
+              padding: "4px 6px",
+              fontWeight: 600,
+            }}
+          >
+            <span>Sourate</span>
+            <span style={{ textAlign: "right" }}>Total lectures</span>
+          </div>
+          {souratesTable.map((row) => (
+            <div
+              key={row.name}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "2fr 1fr",
+                padding: "4px 6px",
+                borderTop: "1px solid #e5e7eb",
+              }}
+            >
+              <span>{row.name}</span>
+              <span style={{ textAlign: "right", fontWeight: 600 }}>{row.total}</span>
+            </div>
+          ))}
+        </div>
       )}
 
       <div
