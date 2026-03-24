@@ -50,6 +50,32 @@ function toYMD(d: Date) {
   return `${year}-${month}-${day}`;
 }
 
+// palette pour les sourates
+const sourateColors = [
+  "#FF006E", // rose fuchsia
+  "#3A86FF", // bleu vif
+  "#FFBE0B", // jaune vif
+  "#FB5607", // orange vif
+  "#8338EC", // violet saturé
+  "#0CCE6B", // vert vif
+  "#FF1493", // rose néon
+  "#00C2FF", // cyan électrique
+  "#FF4D00", // orange rouge très saturé
+  "#9B5DE5", // violet clair vif
+  "#06D6A0", // vert menthe vif
+  "#FF595E", // rouge corail vif
+];
+
+function getSourateColor(name: string) {
+  const key = name.trim().toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  }
+  const index = hash % sourateColors.length;
+  return sourateColors[index];
+}
+
 export default function RecapTotalCard() {
   const [quranEntries, setQuranEntries] = useState<QuranEntry[]>([]);
   const [prieresDays, setPrieresDays] = useState<DayCount[]>([]);
@@ -89,9 +115,9 @@ export default function RecapTotalCard() {
     totalSalawatAllTime,
     thisMonthHizb,
     thisMonthSalawat,
-    chartLabels,
-    chartDataHizb,
-    chartDataSalawat,
+    chartLabelsMonth,
+    chartDataHizbMonth,
+    chartDataSalawatMonth,
     monthKeysSorted,
     monthlyHizb,
     monthlySalawat,
@@ -106,7 +132,6 @@ export default function RecapTotalCard() {
     let thisMonthHizb = 0;
     let thisMonthSalawat = 0;
 
-    const labels: string[] = [];
     const hizbByDay = new Map<string, number>();
     const souratesByDay = new Map<string, { name: string; repetitions: number }[]>();
     const salawatByDay = new Map<string, number>();
@@ -115,6 +140,10 @@ export default function RecapTotalCard() {
     const monthlySalawat = new Map<string, number>();
     let currentYear: number | null = null;
 
+    const chartLabelsMonth: string[] = [];
+    const chartDataHizbMonth: number[] = [];
+    const chartDataSalawatMonth: number[] = [];
+
     if (!today) {
       return {
         totalHizbAllTime,
@@ -122,9 +151,9 @@ export default function RecapTotalCard() {
         totalSalawatAllTime,
         thisMonthHizb,
         thisMonthSalawat,
-        chartLabels: labels,
-        chartDataHizb: [] as number[],
-        chartDataSalawat: [] as number[],
+        chartLabelsMonth,
+        chartDataHizbMonth,
+        chartDataSalawatMonth,
         monthKeysSorted: [] as string[],
         monthlyHizb,
         monthlySalawat,
@@ -140,7 +169,7 @@ export default function RecapTotalCard() {
     // Quran entries
     quranEntries.forEach((e) => {
       const d = new Date(e.date + "T00:00:00");
-      const dayKey = e.date; // YYYY-MM-DD
+      const dayKey = e.date;
       const monthKey = formatMonthKey(d);
 
       if (e.type === "hizb") {
@@ -171,30 +200,23 @@ export default function RecapTotalCard() {
       monthlySalawat.set(monthKey, (monthlySalawat.get(monthKey) || 0) + d.count);
     });
 
-    // Labels: 7 derniers jours
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(today.getDate() - i);
-      const label = date.toLocaleDateString("fr-FR", {
+    // Graphique du mois en cours
+    const year = today.getFullYear();
+    const monthIndex = today.getMonth();
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+
+    for (let day = 1; day <= daysInMonth && day <= today.getDate(); day++) {
+      const d = new Date(year, monthIndex, day);
+      const label = d.toLocaleDateString("fr-FR", {
         day: "2-digit",
         month: "2-digit",
       });
-      labels.push(label);
+      chartLabelsMonth.push(label);
+
+      const key = toYMD(d);
+      chartDataHizbMonth.push(hizbByDay.get(key) || 0);
+      chartDataSalawatMonth.push(salawatByDay.get(key) || 0);
     }
-
-    const chartDataHizb = labels.map((_, idx) => {
-      const date = new Date(today);
-      date.setDate(today.getDate() - (6 - idx));
-      const key = toYMD(date);
-      return hizbByDay.get(key) || 0;
-    });
-
-    const chartDataSalawat = labels.map((_, idx) => {
-      const date = new Date(today);
-      date.setDate(today.getDate() - (6 - idx));
-      const key = toYMD(date);
-      return salawatByDay.get(key) || 0;
-    });
 
     const monthKeysSorted = Array.from(
       new Set([...monthlyHizb.keys(), ...monthlySalawat.keys()]),
@@ -206,9 +228,9 @@ export default function RecapTotalCard() {
       totalSalawatAllTime,
       thisMonthHizb,
       thisMonthSalawat,
-      chartLabels: labels,
-      chartDataHizb,
-      chartDataSalawat,
+      chartLabelsMonth,
+      chartDataHizbMonth,
+      chartDataSalawatMonth,
       monthKeysSorted,
       monthlyHizb,
       monthlySalawat,
@@ -223,7 +245,8 @@ export default function RecapTotalCard() {
     if (today) {
       const mk = formatMonthKey(today);
       setSelectedMonthKey(mk);
-      setSelectedDayKey(toYMD(today));
+      // plus de sélection automatique d’un jour -> pas d’ouverture auto du modal
+      // setSelectedDayKey(toYMD(today));
     }
   }, [today]);
 
@@ -234,19 +257,19 @@ export default function RecapTotalCard() {
       year: "numeric",
     });
 
-  const chartDataset = {
-    labels: chartLabels,
+  const chartDatasetMonth = {
+    labels: chartLabelsMonth,
     datasets: [
       {
-        label: "Hizb / jour",
-        data: chartDataHizb,
+        label: "Hizb / jour (mois en cours)",
+        data: chartDataHizbMonth,
         borderColor: "rgba(129, 140, 248, 1)",
         backgroundColor: "rgba(129, 140, 248, 0.2)",
         tension: 0.3,
       },
       {
-        label: "Salat sur le Prophète ﷺ",
-        data: chartDataSalawat,
+        label: "Salat sur le Prophète ﷺ / jour",
+        data: chartDataSalawatMonth,
         borderColor: "rgba(45, 212, 191, 1)",
         backgroundColor: "rgba(45, 212, 191, 0.2)",
         tension: 0.3,
@@ -385,7 +408,6 @@ export default function RecapTotalCard() {
     const sourates = souratesByDay.get(selectedDayKey) || [];
     const salawat = salawatByDay.get(selectedDayKey) || 0;
 
-    // agrégation des sourates par nom (somme des répétitions)
     const sourateMap = new Map<string, number>();
     sourates.forEach((s) => {
       const key = s.name.trim().toLowerCase();
@@ -412,7 +434,6 @@ export default function RecapTotalCard() {
       year: "numeric",
     });
 
-  // tableau par sourate pour le mois sélectionné
   const souratesTable = useMemo(() => {
     if (!selectedMonthKey) return [];
 
@@ -478,6 +499,34 @@ export default function RecapTotalCard() {
         </div>
       </div>
 
+      {/* Graphique du mois en cours */}
+      {chartLabelsMonth.length > 0 && (
+        <div style={{ height: "180px", marginBottom: "0.75rem" }}>
+          <Line
+            data={chartDatasetMonth}
+            options={{
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: {
+                  labels: {
+                    font: { size: 10 },
+                  },
+                },
+              },
+              scales: {
+                x: {
+                  ticks: { font: { size: 10 } },
+                },
+                y: {
+                  ticks: { font: { size: 10 } },
+                },
+              },
+            }}
+          />
+        </div>
+      )}
+
       {/* Sélecteur de mois + comparatif rapide */}
       {monthKeysSorted.length > 0 && (
         <>
@@ -501,7 +550,7 @@ export default function RecapTotalCard() {
                 setSelectedMonthKey(mk);
                 const [y, m] = mk.split("-");
                 const d = new Date(Number(y), Number(m) - 1, 1);
-                setSelectedDayKey(toYMD(d));
+                setSelectedDayKey(null);
               }}
               style={{
                 fontSize: "0.8rem",
@@ -593,20 +642,57 @@ export default function RecapTotalCard() {
             <span>Sourate</span>
             <span style={{ textAlign: "right" }}>Total lectures</span>
           </div>
-          {souratesTable.map((row) => (
-            <div
-              key={row.name}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "2fr 1fr",
-                padding: "4px 6px",
-                borderTop: "1px solid #e5e7eb",
-              }}
-            >
-              <span>{row.name}</span>
-              <span style={{ textAlign: "right", fontWeight: 600 }}>{row.total}</span>
-            </div>
-          ))}
+          {souratesTable.map((row) => {
+            const color = getSourateColor(row.name);
+            return (
+              <div
+                key={row.name}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "2fr 1fr",
+                  padding: "6px 8px",
+                  borderTop: "1px solid #e5e7eb",
+                  backgroundColor: "#ffffff",
+                }}
+              >
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "10px",
+                      height: "10px",
+                      borderRadius: "999px",
+                      backgroundColor: color,
+                      boxShadow: `0 0 0 2px ${color}33`,
+                    }}
+                  />
+                  <strong
+                    style={{
+                      fontWeight: 800,
+                      color,
+                      textTransform: "capitalize",
+                    }}
+                  >
+                    {row.name}
+                  </strong>
+                </span>
+                <span
+                  style={{
+                    textAlign: "right",
+                    fontWeight: 700,
+                    color: "#111827",
+                  }}
+                >
+                  {row.total}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -617,34 +703,6 @@ export default function RecapTotalCard() {
           margin: "6px 0 8px",
         }}
       />
-
-      {/* Graphique 7 derniers jours */}
-      {chartLabels.length > 0 && (
-        <div style={{ height: "160px" }}>
-          <Line
-            data={chartDataset}
-            options={{
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: {
-                legend: {
-                  labels: {
-                    font: { size: 10 },
-                  },
-                },
-              },
-              scales: {
-                x: {
-                  ticks: { font: { size: 10 } },
-                },
-                y: {
-                  ticks: { font: { size: 10 } },
-                },
-              },
-            }}
-          />
-        </div>
-      )}
 
       {/* Tableau année en cours */}
       {yearlyRows.length > 0 && (
@@ -815,7 +873,7 @@ export default function RecapTotalCard() {
           style={{
             position: "fixed",
             inset: 0,
-            backgroundColor: "rgba(15,23,42,0.45)",
+            backgroundColor: "rgba(88, 28, 135, 0.45)", // overlay mauve
             display: "flex",
             justifyContent: "center",
             alignItems: "flex-end",
@@ -828,12 +886,12 @@ export default function RecapTotalCard() {
             style={{
               width: "100%",
               maxWidth: "600px",
-              background: "#ffffff",
+              background: "#f5e9ff", // fond mauve très clair
               borderRadius: "1.25rem 1.25rem 0 0",
               padding: "1rem 1rem 1.25rem",
               maxHeight: "80vh",
               overflowY: "auto",
-              boxShadow: "0 -10px 25px rgba(15,23,42,0.35)",
+              boxShadow: "0 -10px 25px rgba(76,29,149,0.35)", // ombre violette
             }}
           >
             <div
