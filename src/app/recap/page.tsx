@@ -24,11 +24,6 @@ type QuranEntry = {
   repetitions?: number;
 };
 
-type DayCount = {
-  date: string; // YYYY-MM-DD
-  count: number;
-};
-
 function isSameMonth(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
 }
@@ -78,7 +73,6 @@ function getSourateColor(name: string) {
 
 export default function RecapTotalCard() {
   const [quranEntries, setQuranEntries] = useState<QuranEntry[]>([]);
-  const [prieresDays, setPrieresDays] = useState<DayCount[]>([]);
   const [today, setToday] = useState<Date | null>(null);
   const [selectedMonthKey, setSelectedMonthKey] = useState<string>("");
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
@@ -98,69 +92,45 @@ export default function RecapTotalCard() {
         setQuranEntries([]);
       }
     }
-
-    const pSaved = window.localStorage.getItem("prieresByDay");
-    if (pSaved) {
-      try {
-        setPrieresDays(JSON.parse(pSaved));
-      } catch {
-        setPrieresDays([]);
-      }
-    }
   }, []);
 
   const {
     totalHizbAllTime,
     totalSouratesAllTime,
-    totalSalawatAllTime,
     thisMonthHizb,
-    thisMonthSalawat,
     chartLabelsMonth,
     chartDataHizbMonth,
-    chartDataSalawatMonth,
     monthKeysSorted,
     monthlyHizb,
-    monthlySalawat,
     currentYear,
     hizbByDay,
     souratesByDay,
-    salawatByDay,
   } = useMemo(() => {
     let totalHizbAllTime = 0;
     let totalSouratesAllTime = 0;
-    let totalSalawatAllTime = 0;
     let thisMonthHizb = 0;
-    let thisMonthSalawat = 0;
 
     const hizbByDay = new Map<string, number>();
     const souratesByDay = new Map<string, { name: string; repetitions: number }[]>();
-    const salawatByDay = new Map<string, number>();
 
     const monthlyHizb = new Map<string, number>();
-    const monthlySalawat = new Map<string, number>();
     let currentYear: number | null = null;
 
     const chartLabelsMonth: string[] = [];
     const chartDataHizbMonth: number[] = [];
-    const chartDataSalawatMonth: number[] = [];
 
     if (!today) {
       return {
         totalHizbAllTime,
         totalSouratesAllTime,
-        totalSalawatAllTime,
         thisMonthHizb,
-        thisMonthSalawat,
         chartLabelsMonth,
         chartDataHizbMonth,
-        chartDataSalawatMonth,
         monthKeysSorted: [] as string[],
         monthlyHizb,
-        monthlySalawat,
         currentYear,
         hizbByDay,
         souratesByDay,
-        salawatByDay,
       };
     }
 
@@ -188,18 +158,6 @@ export default function RecapTotalCard() {
       }
     });
 
-    // Prières sur le Prophète
-    prieresDays.forEach((d) => {
-      const date = new Date(d.date + "T00:00:00");
-      const dayKey = d.date;
-      const monthKey = formatMonthKey(date);
-
-      totalSalawatAllTime += d.count;
-      if (isSameMonth(date, today)) thisMonthSalawat += d.count;
-      salawatByDay.set(dayKey, (salawatByDay.get(dayKey) || 0) + d.count);
-      monthlySalawat.set(monthKey, (monthlySalawat.get(monthKey) || 0) + d.count);
-    });
-
     // Graphique du mois en cours
     const year = today.getFullYear();
     const monthIndex = today.getMonth();
@@ -215,38 +173,30 @@ export default function RecapTotalCard() {
 
       const key = toYMD(d);
       chartDataHizbMonth.push(hizbByDay.get(key) || 0);
-      chartDataSalawatMonth.push(salawatByDay.get(key) || 0);
     }
 
-    const monthKeysSorted = Array.from(
-      new Set([...monthlyHizb.keys(), ...monthlySalawat.keys()]),
-    ).sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+    const monthKeysSorted = Array.from(monthlyHizb.keys()).sort((a, b) =>
+      a < b ? 1 : a > b ? -1 : 0,
+    );
 
     return {
       totalHizbAllTime,
       totalSouratesAllTime,
-      totalSalawatAllTime,
       thisMonthHizb,
-      thisMonthSalawat,
       chartLabelsMonth,
       chartDataHizbMonth,
-      chartDataSalawatMonth,
       monthKeysSorted,
       monthlyHizb,
-      monthlySalawat,
       currentYear,
       hizbByDay,
       souratesByDay,
-      salawatByDay,
     };
-  }, [quranEntries, prieresDays, today]);
+  }, [quranEntries, today]);
 
   useEffect(() => {
     if (today) {
       const mk = formatMonthKey(today);
       setSelectedMonthKey(mk);
-      // plus de sélection automatique d’un jour -> pas d’ouverture auto du modal
-      // setSelectedDayKey(toYMD(today));
     }
   }, [today]);
 
@@ -267,13 +217,6 @@ export default function RecapTotalCard() {
         backgroundColor: "rgba(129, 140, 248, 0.2)",
         tension: 0.3,
       },
-      {
-        label: "Salat sur le Prophète ﷺ / jour",
-        data: chartDataSalawatMonth,
-        borderColor: "rgba(45, 212, 191, 1)",
-        backgroundColor: "rgba(45, 212, 191, 0.2)",
-        tension: 0.3,
-      },
     ],
   };
 
@@ -282,17 +225,13 @@ export default function RecapTotalCard() {
       return {
         label: "",
         hizb: 0,
-        salawat: 0,
         prevLabel: "",
         prevHizb: 0,
-        prevSalawat: 0,
         diffHizb: 0,
-        diffSalawat: 0,
       };
     }
 
     const currentHizb = monthlyHizb.get(selectedMonthKey) || 0;
-    const currentSalawat = monthlySalawat.get(selectedMonthKey) || 0;
 
     const [yearStr, monthStr] = selectedMonthKey.split("-");
     const y = Number(yearStr);
@@ -302,7 +241,6 @@ export default function RecapTotalCard() {
     const prevKey = formatMonthKey(prevDate);
 
     const prevHizb = monthlyHizb.get(prevKey) || 0;
-    const prevSalawat = monthlySalawat.get(prevKey) || 0;
 
     const diffHizb =
       prevHizb === 0
@@ -311,24 +249,14 @@ export default function RecapTotalCard() {
           : 0
         : Math.round(((currentHizb - prevHizb) / prevHizb) * 100);
 
-    const diffSalawat =
-      prevSalawat === 0
-        ? currentSalawat > 0
-          ? 100
-          : 0
-        : Math.round(((currentSalawat - prevSalawat) / prevSalawat) * 100);
-
     return {
       label: formatMonthLabel(selectedMonthKey),
       hizb: currentHizb,
-      salawat: currentSalawat,
       prevLabel: formatMonthLabel(prevKey),
       prevHizb,
-      prevSalawat,
       diffHizb,
-      diffSalawat,
     };
-  }, [selectedMonthKey, monthlyHizb, monthlySalawat]);
+  }, [selectedMonthKey, monthlyHizb]);
 
   const yearlyRows = useMemo(() => {
     if (!currentYear) return [];
@@ -337,45 +265,32 @@ export default function RecapTotalCard() {
       key: string;
       label: string;
       hizb: number;
-      salawat: number;
       diffHizb: number;
-      diffSalawat: number;
     }[] = [];
 
     for (let monthIndex = 0; monthIndex < 12; monthIndex++) {
       const d = new Date(currentYear, monthIndex, 1);
       const key = formatMonthKey(d);
       const hizb = monthlyHizb.get(key) || 0;
-      const salawat = monthlySalawat.get(key) || 0;
 
       const prevDate = new Date(currentYear, monthIndex, 1);
       prevDate.setMonth(prevDate.getMonth() - 1);
       const prevKey = formatMonthKey(prevDate);
       const prevHizb = monthlyHizb.get(prevKey) || 0;
-      const prevSalawat = monthlySalawat.get(prevKey) || 0;
 
       const diffHizb =
         prevHizb === 0 ? (hizb > 0 ? 100 : 0) : Math.round(((hizb - prevHizb) / prevHizb) * 100);
-
-      const diffSalawat =
-        prevSalawat === 0
-          ? salawat > 0
-            ? 100
-            : 0
-          : Math.round(((salawat - prevSalawat) / prevSalawat) * 100);
 
       rows.push({
         key,
         label: d.toLocaleDateString("fr-FR", { month: "long" }),
         hizb,
-        salawat,
         diffHizb,
-        diffSalawat,
       });
     }
 
     return rows;
-  }, [currentYear, monthlyHizb, monthlySalawat]);
+  }, [currentYear, monthlyHizb]);
 
   const calendarDays = useMemo(() => {
     if (!selectedMonthKey) return [];
@@ -406,7 +321,6 @@ export default function RecapTotalCard() {
 
     const hizb = hizbByDay.get(selectedDayKey) || 0;
     const sourates = souratesByDay.get(selectedDayKey) || [];
-    const salawat = salawatByDay.get(selectedDayKey) || 0;
 
     const sourateMap = new Map<string, number>();
     sourates.forEach((s) => {
@@ -421,9 +335,8 @@ export default function RecapTotalCard() {
     return {
       hizb,
       sourates: souratesMerged,
-      salawat,
     };
-  }, [selectedDayKey, hizbByDay, souratesByDay, salawatByDay]);
+  }, [selectedDayKey, hizbByDay, souratesByDay]);
 
   const selectedDayLabel =
     selectedDayKey &&
@@ -486,16 +399,12 @@ export default function RecapTotalCard() {
           <p style={{ margin: 0, fontSize: "1.2rem", fontWeight: 700 }}>{totalHizbAllTime}</p>
         </div>
         <div>
-          <p style={{ margin: 0, color: "#6b7280" }}>Salat Prophète (total)</p>
-          <p style={{ margin: 0, fontSize: "1.2rem", fontWeight: 700 }}>{totalSalawatAllTime}</p>
+          <p style={{ margin: 0, color: "#6b7280" }}>Sourates (total)</p>
+          <p style={{ margin: 0, fontSize: "1.2rem", fontWeight: 700 }}>{totalSouratesAllTime}</p>
         </div>
         <div>
           <p style={{ margin: 0, color: "#6b7280", fontSize: "0.75rem" }}>Hizb ce mois-ci</p>
           <p style={{ margin: 0, fontWeight: 600 }}>{thisMonthHizb}</p>
-        </div>
-        <div>
-          <p style={{ margin: 0, color: "#6b7280", fontSize: "0.75rem" }}>Salat ce mois-ci</p>
-          <p style={{ margin: 0, fontWeight: 600 }}>{thisMonthSalawat}</p>
         </div>
       </div>
 
@@ -548,8 +457,6 @@ export default function RecapTotalCard() {
               onChange={(e) => {
                 const mk = e.target.value;
                 setSelectedMonthKey(mk);
-                const [y, m] = mk.split("-");
-                const d = new Date(Number(y), Number(m) - 1, 1);
                 setSelectedDayKey(null);
               }}
               style={{
@@ -594,23 +501,6 @@ export default function RecapTotalCard() {
                 >
                   {selectedStats.diffHizb > 0 ? "+" : ""}
                   {selectedStats.diffHizb}%
-                </span>
-              </p>
-              <p style={{ margin: 0 }}>
-                Salat : <strong>{selectedStats.salawat}</strong> (précédent :{" "}
-                <strong>{selectedStats.prevSalawat}</strong>) •{" "}
-                <span
-                  style={{
-                    color:
-                      selectedStats.diffSalawat > 0
-                        ? "#15803d"
-                        : selectedStats.diffSalawat < 0
-                          ? "#b91c1c"
-                          : "#4b5563",
-                  }}
-                >
-                  {selectedStats.diffSalawat > 0 ? "+" : ""}
-                  {selectedStats.diffSalawat}%
                 </span>
               </p>
             </div>
@@ -722,7 +612,7 @@ export default function RecapTotalCard() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1.4fr 0.8fr 0.8fr 0.9fr 0.9fr",
+                gridTemplateColumns: "1.4fr 0.8fr 0.9fr",
                 background: "#f3f4f6",
                 padding: "4px 6px",
                 fontWeight: 600,
@@ -730,16 +620,14 @@ export default function RecapTotalCard() {
             >
               <span>Mois</span>
               <span style={{ textAlign: "right" }}>Hizb</span>
-              <span style={{ textAlign: "right" }}>Salat</span>
               <span style={{ textAlign: "right" }}>% Hizb</span>
-              <span style={{ textAlign: "right" }}>% Salat</span>
             </div>
             {yearlyRows.map((row) => (
               <div
                 key={row.key}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1.4fr 0.8fr 0.8fr 0.9fr 0.9fr",
+                  gridTemplateColumns: "1.4fr 0.8fr 0.9fr",
                   padding: "4px 6px",
                   borderTop: "1px solid #e5e7eb",
                   backgroundColor: selectedMonthKey === row.key ? "#eef2ff" : "#ffffff",
@@ -747,7 +635,6 @@ export default function RecapTotalCard() {
               >
                 <span>{row.label}</span>
                 <span style={{ textAlign: "right", fontWeight: 600 }}>{row.hizb}</span>
-                <span style={{ textAlign: "right", fontWeight: 600 }}>{row.salawat}</span>
                 <span
                   style={{
                     textAlign: "right",
@@ -756,16 +643,6 @@ export default function RecapTotalCard() {
                 >
                   {row.diffHizb > 0 ? "+" : ""}
                   {row.diffHizb}%
-                </span>
-                <span
-                  style={{
-                    textAlign: "right",
-                    color:
-                      row.diffSalawat > 0 ? "#15803d" : row.diffSalawat < 0 ? "#b91c1c" : "#4b5563",
-                  }}
-                >
-                  {row.diffSalawat > 0 ? "+" : ""}
-                  {row.diffSalawat}%
                 </span>
               </div>
             ))}
@@ -799,9 +676,8 @@ export default function RecapTotalCard() {
           }
           const key = toYMD(d);
           const hizb = hizbByDay.get(key) || 0;
-          const salawat = salawatByDay.get(key) || 0;
           const hasSourates = (souratesByDay.get(key) || []).length > 0;
-          const hasActivity = hizb > 0 || salawat > 0 || hasSourates;
+          const hasActivity = hizb > 0 || hasSourates;
           const isSelected = selectedDayKey === key;
 
           return (
@@ -860,9 +736,6 @@ export default function RecapTotalCard() {
                 ? selectedDayStats.sourates.map((s) => `${s.name} × ${s.repetitions}`).join(" | ")
                 : "Aucune"}
             </strong>
-          </p>
-          <p style={{ margin: 0 }}>
-            Salat sur le Prophète ﷺ : <strong>{selectedDayStats.salawat}</strong>
           </p>
         </div>
       )}
@@ -953,9 +826,6 @@ export default function RecapTotalCard() {
                   ? selectedDayStats.sourates.map((s) => `${s.name} × ${s.repetitions}`).join(" | ")
                   : "Aucune"}
               </strong>
-            </p>
-            <p style={{ fontSize: "0.9rem", marginBottom: "0.6rem" }}>
-              Salat sur le Prophète ﷺ : <strong>{selectedDayStats.salawat}</strong>
             </p>
 
             <div style={{ textAlign: "center", marginTop: "0.8rem" }}>
