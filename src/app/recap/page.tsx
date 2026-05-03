@@ -47,18 +47,18 @@ function toYMD(d: Date) {
 
 // palette pour les sourates
 const sourateColors = [
-  "#FF006E", // rose fuchsia
-  "#3A86FF", // bleu vif
-  "#FFBE0B", // jaune vif
-  "#FB5607", // orange vif
-  "#8338EC", // violet saturé
-  "#0CCE6B", // vert vif
-  "#FF1493", // rose néon
-  "#00C2FF", // cyan électrique
-  "#FF4D00", // orange rouge très saturé
-  "#9B5DE5", // violet clair vif
-  "#06D6A0", // vert menthe vif
-  "#FF595E", // rouge corail vif
+  "#FF006E",
+  "#3A86FF",
+  "#FFBE0B",
+  "#FB5607",
+  "#8338EC",
+  "#0CCE6B",
+  "#FF1493",
+  "#00C2FF",
+  "#FF4D00",
+  "#9B5DE5",
+  "#06D6A0",
+  "#FF595E",
 ];
 
 function getSourateColor(name: string) {
@@ -370,6 +370,79 @@ export default function RecapTotalCard() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [quranEntries, selectedMonthKey]);
 
+  // Navigation mois précédent
+  const goToPreviousMonth = () => {
+    if (!selectedMonthKey) return;
+    const [yearStr, monthStr] = selectedMonthKey.split("-");
+    const y = Number(yearStr);
+    const m = Number(monthStr) - 1;
+    const prevDate = new Date(y, m, 1);
+    prevDate.setMonth(prevDate.getMonth() - 1);
+    const prevKey = formatMonthKey(prevDate);
+    setSelectedMonthKey(prevKey);
+    setSelectedDayKey(null);
+  };
+
+  // Navigation mois suivant
+  const goToNextMonth = () => {
+    if (!selectedMonthKey) return;
+    const [yearStr, monthStr] = selectedMonthKey.split("-");
+    const y = Number(yearStr);
+    const m = Number(monthStr) - 1;
+    const nextDate = new Date(y, m, 1);
+    nextDate.setMonth(nextDate.getMonth() + 1);
+    const nextKey = formatMonthKey(nextDate);
+
+    // Ne pas aller au-delà du mois en cours
+    if (today && nextDate <= today) {
+      setSelectedMonthKey(nextKey);
+      setSelectedDayKey(null);
+    }
+  };
+
+  // Export JSON
+  const exportMonthData = () => {
+    if (!selectedMonthKey) return;
+
+    const [yearStr, monthStr] = selectedMonthKey.split("-");
+    const y = Number(yearStr);
+    const m = Number(monthStr) - 1;
+
+    // Filtrer les entrées du mois sélectionné
+    const monthEntries = quranEntries.filter((e) => {
+      const d = new Date(e.date + "T00:00:00");
+      return d.getFullYear() === y && d.getMonth() === m;
+    });
+
+    const exportData = {
+      mois: formatMonthLabel(selectedMonthKey),
+      totalHizb: monthlyHizb.get(selectedMonthKey) || 0,
+      totalSourates: souratesTable.reduce((acc, s) => acc + s.total, 0),
+      sourates: souratesTable,
+      entrées: monthEntries,
+    };
+
+    // Créer le fichier JSON
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: "application/json",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `quran-${selectedMonthKey}.json`;
+
+    document.body.appendChild(a);
+    a.click();
+
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Vérifier si on est au mois actuel
+  const isCurrentMonth =
+    today && selectedMonthKey ? formatMonthKey(today) === selectedMonthKey : false;
+
   return (
     <motion.section
       initial={{ opacity: 0, y: 16 }}
@@ -453,7 +526,7 @@ export default function RecapTotalCard() {
             </label>
             <select
               id="month-select"
-              value={selectedMonthKey || (monthKeysSorted[0] ?? "")}
+              value={selectedMonthKey}
               onChange={(e) => {
                 const mk = e.target.value;
                 setSelectedMonthKey(mk);
@@ -586,6 +659,28 @@ export default function RecapTotalCard() {
         </div>
       )}
 
+      {/* Bouton export */}
+      {selectedMonthKey && (
+        <div style={{ marginBottom: "0.6rem", textAlign: "center" }}>
+          <button
+            type="button"
+            onClick={exportMonthData}
+            className="btn"
+            style={{
+              fontSize: "0.8rem",
+              padding: "6px 12px",
+              backgroundColor: "#8338EC",
+              color: "#fff",
+              border: "none",
+              borderRadius: "8px",
+              cursor: "pointer",
+            }}
+          >
+            📥 Exporter {formatMonthLabel(selectedMonthKey)}
+          </button>
+        </div>
+      )}
+
       <div
         style={{
           height: "1px",
@@ -652,9 +747,50 @@ export default function RecapTotalCard() {
 
       {/* Calendrier + récap jour */}
       <h3 style={{ fontSize: "0.95rem", marginTop: "1rem" }}>Calendrier & récap journalier</h3>
-      <p style={{ fontSize: "0.8rem", color: "#777", marginBottom: "0.4rem" }}>
-        Mois sélectionné : {selectedStats.label || formatMonthLabel(selectedMonthKey)}
-      </p>
+
+      {/* Navigation mois */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "0.5rem",
+        }}
+      >
+        <button
+          type="button"
+          onClick={goToPreviousMonth}
+          style={{
+            padding: "4px 8px",
+            fontSize: "0.85rem",
+            borderRadius: "6px",
+            border: "1px solid #d1d5db",
+            backgroundColor: "#fff",
+            cursor: "pointer",
+          }}
+        >
+          ◀ Précédent
+        </button>
+        <p style={{ fontSize: "0.8rem", color: "#777", margin: 0 }}>
+          {selectedStats.label || formatMonthLabel(selectedMonthKey)}
+        </p>
+        <button
+          type="button"
+          onClick={goToNextMonth}
+          disabled={isCurrentMonth}
+          style={{
+            padding: "4px 8px",
+            fontSize: "0.85rem",
+            borderRadius: "6px",
+            border: "1px solid #d1d5db",
+            backgroundColor: "#fff",
+            cursor: isCurrentMonth ? "not-allowed" : "pointer",
+            opacity: isCurrentMonth ? 0.5 : 1,
+          }}
+        >
+          Suivant ▶
+        </button>
+      </div>
 
       <div
         style={{
@@ -746,7 +882,7 @@ export default function RecapTotalCard() {
           style={{
             position: "fixed",
             inset: 0,
-            backgroundColor: "rgba(88, 28, 135, 0.45)", // overlay mauve
+            backgroundColor: "rgba(88, 28, 135, 0.45)",
             display: "flex",
             justifyContent: "center",
             alignItems: "flex-end",
@@ -759,12 +895,12 @@ export default function RecapTotalCard() {
             style={{
               width: "100%",
               maxWidth: "600px",
-              background: "#f5e9ff", // fond mauve très clair
+              background: "#f5e9ff",
               borderRadius: "1.25rem 1.25rem 0 0",
               padding: "1rem 1rem 1.25rem",
               maxHeight: "80vh",
               overflowY: "auto",
-              boxShadow: "0 -10px 25px rgba(76,29,149,0.35)", // ombre violette
+              boxShadow: "0 -10px 25px rgba(76,29,149,0.35)",
             }}
           >
             <div
